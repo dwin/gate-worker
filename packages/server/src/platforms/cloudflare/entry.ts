@@ -1,4 +1,8 @@
-/** Cloudflare Workers entry: HTTP via Hono, token revocation via a Queue consumer. */
+/**
+ * Cloudflare Workers entry: HTTP via Hono, token revocation via a Queue
+ * consumer. The same consumer serves the revocation queue and its dead-letter
+ * queue, so it works whatever names the queues were given at deploy time.
+ */
 import type { RevocationJob } from "@gate/core";
 import { createApp } from "../../app.ts";
 import { compiledConfig } from "../../config.generated.ts";

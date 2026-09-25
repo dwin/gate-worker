@@ -2,5 +2,5 @@ pnpm-lock.yaml
 packages/action/dist/
 packages/testkit/fixtures/
 **/*.generated.ts
-packages/server/config.schema.json
+config.schema.json
 .wrangler/

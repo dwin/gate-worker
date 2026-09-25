@@ -53,6 +53,15 @@ describe("TokenSealer", () => {
     await expect(old.open(await sealed(rotated))).rejects.toThrow(/unknown revocation key id: k2/);
   });
 
+  it("accepts a single bare base64 key, as the deploy button form collects it", async () => {
+    const bare = await TokenSealer.fromSecret(key(7), "test");
+    const job = await sealed(bare);
+    expect(job.kid).toBe("default");
+    expect(
+      await (await TokenSealer.fromSecret(`k2:${key(8)},default:${key(7)}`, "test")).open(job),
+    ).toBe(TOKEN);
+  });
+
   it("ephemeral sealers work in-process only", async () => {
     const a = await TokenSealer.ephemeral();
     const b = await TokenSealer.ephemeral();
@@ -63,7 +72,7 @@ describe("TokenSealer", () => {
 
   it.each([
     ["", "expected"],
-    [`noseparator`, "kid:base64key"],
+    ["bmFrZWQ=", "must be 32 bytes"],
     [`bad kid!:${key(1)}`, "kid:base64key"],
     ["k1:***", "not valid base64"],
     [`k1:${btoa("short")}`, "must be 32 bytes"],

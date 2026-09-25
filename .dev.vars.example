@@ -1,0 +1,11 @@
+# Secrets for the Worker. The Deploy to Cloudflare button prompts for each one.
+# For `pnpm dev`, copy this file to .dev.vars and fill it in.
+
+# Client ID of your GitHub App (starts with "Iv").
+GATE_GITHUB_APP_CLIENT_ID=
+# Organization or user the App is installed on; only its workflows get tokens.
+GATE_GITHUB_ORGANIZATION=
+# The App's private key (.pem), PKCS#1 as GitHub generates it, or PKCS#8.
+GATE_GITHUB_APP_PRIVATE_KEY=
+# Output of `openssl rand -base64 32`. Encrypts tokens awaiting revocation.
+GATE_REVOCATION_KEYS=

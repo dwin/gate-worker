@@ -1,19 +1,21 @@
 /**
- * Validates config.yaml and compiles it into src/config.generated.ts plus
- * config.schema.json. Runs under plain Node (type stripping), in CI, and as
- * wrangler's build command, so an invalid configuration cannot be deployed.
+ * Validates the repository's config.yaml and compiles it into
+ * packages/server/src/config.generated.ts plus config.schema.json. Runs under
+ * plain Node (type stripping), in CI, and as wrangler's build command, so an
+ * invalid configuration cannot be deployed.
  *
- * Usage: node scripts/compile-config.ts [path/to/config.yaml]
+ * Usage: node packages/server/scripts/compile-config.ts [path/to/config.yaml]
  */
 import { readFileSync, writeFileSync, existsSync } from "node:fs";
 import { resolve } from "node:path";
 import process from "node:process";
 import { centralConfigJsonSchema, compileCentralConfig, ConfigError } from "@gate/core";
 
-const root = resolve(import.meta.dirname, "..");
-const source = resolve(root, process.argv[2] ?? "config.yaml");
-const generated = resolve(root, "src/config.generated.ts");
-const schemaFile = resolve(root, "config.schema.json");
+const serverRoot = resolve(import.meta.dirname, "..");
+const repositoryRoot = resolve(serverRoot, "../..");
+const source = resolve(process.cwd(), process.argv[2] ?? resolve(repositoryRoot, "config.yaml"));
+const generated = resolve(serverRoot, "src/config.generated.ts");
+const schemaFile = resolve(repositoryRoot, "config.schema.json");
 
 function writeIfChanged(path: string, content: string): void {
   if (!existsSync(path) || readFileSync(path, "utf8") !== content) {

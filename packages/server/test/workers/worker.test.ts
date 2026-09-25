@@ -43,7 +43,7 @@ describe("deployed entry point", () => {
     expect(response.headers.get("strict-transport-security")).toContain("max-age");
   });
 
-  it("builds the runtime from compiled config and Worker secrets, importing a PKCS#1 key", async () => {
+  it("builds the runtime from compiled config and the deploy-button secrets, importing a PKCS#1 key", async () => {
     const response = await exports.default.fetch("https://gate.test/api/v1/info");
     expect(response.status).toBe(200);
     expect(await response.json()).toEqual({ fips_enabled: false });
@@ -93,7 +93,11 @@ async function workerHarness() {
         { client_id: "client-1", organization: "example-org", private_key_secret: "APP_KEY" },
       ],
     }),
-    env: { ...env, APP_KEY: (await generateAppKeyPem()).pem },
+    // Only what this harness needs: the Worker's own quick-setup secrets would override its config.
+    env: {
+      APP_KEY: (await generateAppKeyPem()).pem,
+      GATE_REVOCATION_KEYS: env.GATE_REVOCATION_KEYS,
+    },
     fetch: router.fetch,
     revocation: queueRevocation(queue),
     gate: { logger, github: { retry: NO_WAIT, tokenReadyDelayMs: 0 } },

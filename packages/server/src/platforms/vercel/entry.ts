@@ -1,6 +1,7 @@
 /**
  * Vercel entry. Not production-ready: functions may be frozen after the
- * response, so in-process revocation timers are best-effort. See PLAN.md.
+ * response, so in-process revocation timers are best-effort. See "Platform
+ * support" in the README.
  */
 import process from "node:process";
 import { timerRevocation } from "@gate/core";
@@ -16,7 +17,9 @@ const getRuntime = memoizeRuntime(async () => {
     fetch,
     revocation: timerRevocation(),
   });
-  runtime.logger.warn("vercel entry uses best-effort in-process revocation; see PLAN.md");
+  runtime.logger.warn(
+    "vercel entry uses best-effort in-process revocation; see 'Platform support' in the README",
+  );
   return runtime;
 });
 

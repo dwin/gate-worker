@@ -2,8 +2,8 @@ name: Deploy
 
 # Deploys the Worker on every push to main once the repository variable
 # DEPLOY_ENABLED is "true" and the CLOUDFLARE_API_TOKEN and
-# CLOUDFLARE_ACCOUNT_ID secrets are set. Worker secrets (GitHub App keys,
-# GATE_REVOCATION_KEYS) are managed with `wrangler secret put`, not here.
+# CLOUDFLARE_ACCOUNT_ID secrets are set. Worker secrets (see .dev.vars.example)
+# are managed with `wrangler secret put` or the dashboard, not here.
 
 on:
   push:
@@ -36,6 +36,5 @@ jobs:
         with:
           apiToken: ${{ secrets.CLOUDFLARE_API_TOKEN }}
           accountId: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
-          workingDirectory: packages/server
           packageManager: pnpm
           command: deploy

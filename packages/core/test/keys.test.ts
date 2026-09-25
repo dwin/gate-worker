@@ -26,6 +26,12 @@ describe("importAppPrivateKey", () => {
     await expect(importAppPrivateKey(pem.replace(/\n/g, "\\n"), "test")).resolves.toBeDefined();
   });
 
+  it("accepts a PEM pasted into a single-line field, with newlines removed or turned into spaces", async () => {
+    const { pem } = await generateAppKeyPem();
+    await expect(importAppPrivateKey(pem.replace(/\n/g, ""), "test")).resolves.toBeDefined();
+    await expect(importAppPrivateKey(pem.replace(/\n/g, " "), "test")).resolves.toBeDefined();
+  });
+
   it.each([
     ["garbage", "failed to decode PEM block"],
     [

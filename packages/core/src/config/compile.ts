@@ -81,13 +81,73 @@ function coerce(name: string, value: string, kind: OverrideKind): string | numbe
   }
 }
 
+const GITHUB_ACTIONS_ISSUER = "https://token.actions.githubusercontent.com";
+const GITHUB_OWNER_NAME = /^[A-Za-z0-9](?:[A-Za-z0-9-]{0,38})$/;
+
+/**
+ * Single-App quick setup, used by the Deploy to Cloudflare button: the App's
+ * client ID and organization come from secrets entered at deploy time, and the
+ * organization also restricts GitHub Actions callers to that organization's
+ * workflows (`required_claims.repository_owner`).
+ */
+function applyQuickSetup(
+  config: CentralConfig,
+  env: Readonly<Record<string, string | undefined>>,
+): CentralConfig | undefined {
+  const clientId = env["GATE_GITHUB_APP_CLIENT_ID"]?.trim();
+  const organization = env["GATE_GITHUB_ORGANIZATION"]?.trim();
+  if (!clientId && !organization) {
+    return undefined;
+  }
+  const [app, ...others] = config.github_apps;
+  if (!app || others.length > 0) {
+    throw new ConfigError([
+      "GATE_GITHUB_APP_CLIENT_ID and GATE_GITHUB_ORGANIZATION apply only when config.yaml defines exactly one GitHub App",
+    ]);
+  }
+  if (organization && !GITHUB_OWNER_NAME.test(organization)) {
+    throw new ConfigError([
+      `GATE_GITHUB_ORGANIZATION: ${JSON.stringify(organization)} is not a valid GitHub owner name`,
+    ]);
+  }
+  return {
+    ...config,
+    github_apps: [
+      {
+        ...app,
+        ...(clientId ? { client_id: clientId } : {}),
+        ...(organization ? { organization } : {}),
+      },
+    ],
+    policy: {
+      ...config.policy,
+      providers: config.policy.providers.map((provider) =>
+        organization && provider.issuer === GITHUB_ACTIONS_ISSUER
+          ? {
+              ...provider,
+              // Owner names are alphanumerics and hyphens, so no regex escaping is needed.
+              required_claims: {
+                ...provider.required_claims,
+                repository_owner: `^${organization}$`,
+              },
+            }
+          : provider,
+      ),
+    },
+  };
+}
+
 /** Applies `GATE_*` environment overrides and re-validates the result. */
 export function applyEnvOverrides(
   config: CentralConfig,
   env: Readonly<Record<string, string | undefined>>,
 ): CentralConfig {
-  const draft = structuredClone(config) as unknown as Record<string, Record<string, unknown>>;
-  let changed = false;
+  const quick = applyQuickSetup(config, env);
+  const draft = structuredClone(quick ?? config) as unknown as Record<
+    string,
+    Record<string, unknown>
+  >;
+  let changed = quick !== undefined;
   for (const [name, [section, key], kind] of ENV_OVERRIDES) {
     const value = env[name];
     if (value === undefined || value === "") {

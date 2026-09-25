@@ -11,6 +11,7 @@ import type { RevocationJob } from "./job.ts";
 
 const KEY_ID_PATTERN = /^[A-Za-z0-9_-]{1,32}$/;
 const IV_BYTES = 12;
+const DEFAULT_KEY_ID = "default";
 
 export interface SealInput {
   readonly token: string;
@@ -46,6 +47,7 @@ async function importKey(raw: Uint8Array<ArrayBuffer>): Promise<CryptoKey> {
  *
  * Keys come from one secret: comma-separated `kid:base64(32 bytes)` entries.
  * The first entry seals new jobs; every entry can open, which allows rotation.
+ * A single bare base64 key is accepted too, with key ID `default`.
  */
 export class TokenSealer {
   readonly #current: string;
@@ -67,7 +69,10 @@ export class TokenSealer {
     }
     const keys = new Map<string, CryptoKey>();
     const problems: string[] = [];
-    for (const entry of entries) {
+    const normalized = entries.map((entry) =>
+      entry.includes(":") ? entry : `${DEFAULT_KEY_ID}:${entry}`,
+    );
+    for (const entry of normalized) {
       const separator = entry.indexOf(":");
       const kid = entry.slice(0, separator);
       if (separator <= 0 || !KEY_ID_PATTERN.test(kid)) {
@@ -95,7 +100,7 @@ export class TokenSealer {
       }
       keys.set(kid, await importKey(raw));
     }
-    const current = entries[0]?.split(":", 1)[0];
+    const current = normalized[0]?.split(":", 1)[0];
     if (problems.length > 0 || current === undefined) {
       throw new ConfigError(problems);
     }

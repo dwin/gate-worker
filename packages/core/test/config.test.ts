@@ -194,6 +194,38 @@ describe("applyEnvOverrides", () => {
   });
 });
 
+describe("quick setup overrides", () => {
+  const { config } = compileCentralConfig(MINIMAL);
+
+  it("sets the single App's client ID and organization and restricts GitHub Actions callers to it", () => {
+    const overridden = applyEnvOverrides(config, {
+      GATE_GITHUB_APP_CLIENT_ID: "Iv23liAbc",
+      GATE_GITHUB_ORGANIZATION: "acme-inc",
+    });
+    expect(overridden.github_apps).toEqual([
+      { client_id: "Iv23liAbc", organization: "acme-inc", private_key_secret: "GATE_APP_KEY" },
+    ]);
+    expect(overridden.policy.providers[0]?.required_claims).toEqual({
+      repository_owner: "^acme-inc$",
+    });
+  });
+
+  it("rejects invalid owner names and configs with several Apps", () => {
+    expect(() => applyEnvOverrides(config, { GATE_GITHUB_ORGANIZATION: "acme|evil" })).toThrow(
+      /not a valid GitHub owner name/,
+    );
+    const twoApps = compileCentralConfig(
+      MINIMAL.replace(
+        "github_apps:",
+        "github_apps:\n  - { client_id: b, organization: other, private_key_secret: B }",
+      ),
+    ).config;
+    expect(() => applyEnvOverrides(twoApps, { GATE_GITHUB_APP_CLIENT_ID: "x" })).toThrow(
+      /exactly one GitHub App/,
+    );
+  });
+});
+
 describe("centralConfigJsonSchema", () => {
   it("describes the input shape for editors", () => {
     const schema = centralConfigJsonSchema();

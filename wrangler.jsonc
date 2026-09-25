@@ -1,0 +1,41 @@
+{
+  "$schema": "node_modules/wrangler/config-schema.json",
+  "name": "gate",
+  "main": "packages/server/src/platforms/cloudflare/entry.ts",
+  "compatibility_date": "2026-09-01",
+  // Validates config.yaml before every `wrangler dev` and `wrangler deploy`.
+  "build": {
+    "command": "pnpm run config:compile",
+  },
+  "vars": {
+    // GATE_* overrides, as upstream supports through Viper. Secrets are listed
+    // in .dev.vars.example; the Deploy to Cloudflare button prompts for them.
+    "GATE_LOGGER_LEVEL": "info",
+  },
+  // Both queues are provisioned automatically by `wrangler deploy` and the
+  // Deploy to Cloudflare button. The dead-letter queue is also consumed, which
+  // gives failed revocations five more attempts and logs them as errors.
+  "queues": {
+    "producers": [
+      { "queue": "gate-revoke", "binding": "REVOKE" },
+      { "queue": "gate-revoke-dlq", "binding": "REVOKE_DLQ" },
+    ],
+    "consumers": [
+      {
+        "queue": "gate-revoke",
+        "max_batch_size": 10,
+        "max_retries": 5,
+        "dead_letter_queue": "gate-revoke-dlq",
+      },
+      {
+        "queue": "gate-revoke-dlq",
+        "max_batch_size": 10,
+        "max_retries": 5,
+      },
+    ],
+  },
+  "observability": {
+    "enabled": true,
+    "traces": { "enabled": true, "head_sampling_rate": 1 },
+  },
+}

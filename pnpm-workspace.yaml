@@ -40,8 +40,8 @@ minimumReleaseAgeExclude:
   - wrangler@4.139.0
 
 # Packages allowed to run install scripts (native binaries only).
-allowBuilds:
-  esbuild: true
-  workerd: true
-  lefthook: true
-  unrs-resolver: true
+onlyBuiltDependencies:
+  - esbuild
+  - lefthook
+  - unrs-resolver
+  - workerd

@@ -15,11 +15,14 @@ const appKey = generateKeyPairSync("rsa", { modulusLength: 2048 }).privateKey.ex
 export default defineConfig({
   plugins: [
     cloudflareTest({
-      wrangler: { configPath: "./wrangler.jsonc" },
+      wrangler: { configPath: "../../wrangler.jsonc" },
       miniflare: {
         bindings: {
-          GATE_APP_KEY_EXAMPLE_ORG: appKey.toString(),
-          GATE_REVOCATION_KEYS: `k1:${randomBytes(32).toString("base64")}`,
+          // The values the Deploy to Cloudflare button collects, in the same shape.
+          GATE_GITHUB_APP_CLIENT_ID: "Iv23liTest",
+          GATE_GITHUB_ORGANIZATION: "acme-inc",
+          GATE_GITHUB_APP_PRIVATE_KEY: appKey.toString(),
+          GATE_REVOCATION_KEYS: randomBytes(32).toString("base64"),
         },
       },
     }),

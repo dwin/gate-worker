@@ -3,7 +3,7 @@
  *
  * Not production-ready: Lambda freezes between invocations, so in-process
  * revocation timers are best-effort, and Lambda's 4 KB environment limit rules
- * out GitHub App keys in env. Both need the adapters listed in PLAN.md.
+ * out GitHub App keys in env. See "Platform support" in the README.
  */
 import process from "node:process";
 import { timerRevocation } from "@gate/core";
@@ -19,7 +19,9 @@ const getRuntime = memoizeRuntime(async () => {
     fetch,
     revocation: timerRevocation(),
   });
-  runtime.logger.warn("lambda entry uses best-effort in-process revocation; see PLAN.md");
+  runtime.logger.warn(
+    "lambda entry uses best-effort in-process revocation; see 'Platform support' in the README",
+  );
   return runtime;
 });
 

@@ -12,5 +12,5 @@ pre-commit:
       glob: "*.ts"
       run: pnpm typecheck
     config:
-      glob: "packages/server/config.yaml"
+      glob: "config.yaml"
       run: pnpm config:compile
