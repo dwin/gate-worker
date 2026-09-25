@@ -1,0 +1,310 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "type": "object",
+  "properties": {
+    "logger": {
+      "default": {},
+      "type": "object",
+      "properties": {
+        "level": {
+          "default": "info",
+          "type": "string",
+          "enum": [
+            "debug",
+            "info",
+            "warn",
+            "error"
+          ]
+        },
+        "format": {
+          "default": "json",
+          "type": "string",
+          "enum": [
+            "json",
+            "text"
+          ]
+        }
+      },
+      "additionalProperties": false
+    },
+    "oidc": {
+      "default": {},
+      "type": "object",
+      "properties": {
+        "audience": {
+          "default": "gate",
+          "type": "string",
+          "minLength": 1
+        }
+      },
+      "additionalProperties": false
+    },
+    "policy": {
+      "type": "object",
+      "properties": {
+        "version": {
+          "default": "1.0",
+          "type": "string",
+          "const": "1.0"
+        },
+        "trust_policy_path": {
+          "type": "string",
+          "minLength": 1
+        },
+        "default_token_ttl": {
+          "default": 900,
+          "type": "integer",
+          "exclusiveMinimum": 0,
+          "maximum": 9007199254740991
+        },
+        "max_token_ttl": {
+          "default": 3600,
+          "type": "integer",
+          "exclusiveMinimum": 0,
+          "maximum": 9007199254740991
+        },
+        "require_explicit_policy": {
+          "default": false,
+          "type": "boolean"
+        },
+        "github_api_base_url": {
+          "default": "https://api.github.com",
+          "type": "string",
+          "format": "uri"
+        },
+        "github_raw_base_url": {
+          "type": "string"
+        },
+        "providers": {
+          "minItems": 1,
+          "type": "array",
+          "items": {
+            "type": "object",
+            "properties": {
+              "issuer": {
+                "type": "string",
+                "minLength": 1
+              },
+              "name": {
+                "type": "string",
+                "minLength": 1
+              },
+              "required_claims": {
+                "type": "object",
+                "propertyNames": {
+                  "type": "string"
+                },
+                "additionalProperties": {
+                  "anyOf": [
+                    {
+                      "type": "string"
+                    },
+                    {
+                      "type": "object",
+                      "properties": {
+                        "pattern": {
+                          "type": "string"
+                        },
+                        "description": {
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "pattern"
+                      ],
+                      "additionalProperties": false
+                    }
+                  ]
+                }
+              },
+              "forbidden_claims": {
+                "type": "object",
+                "propertyNames": {
+                  "type": "string"
+                },
+                "additionalProperties": {
+                  "anyOf": [
+                    {
+                      "type": "string"
+                    },
+                    {
+                      "type": "object",
+                      "properties": {
+                        "pattern": {
+                          "type": "string"
+                        },
+                        "description": {
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "pattern"
+                      ],
+                      "additionalProperties": false
+                    }
+                  ]
+                }
+              },
+              "time_restrictions": {
+                "type": "object",
+                "properties": {
+                  "allowed_days": {
+                    "default": [],
+                    "type": "array",
+                    "items": {
+                      "type": "string",
+                      "enum": [
+                        "Monday",
+                        "Tuesday",
+                        "Wednesday",
+                        "Thursday",
+                        "Friday",
+                        "Saturday",
+                        "Sunday"
+                      ]
+                    }
+                  },
+                  "allowed_hours": {
+                    "type": "object",
+                    "properties": {
+                      "start": {
+                        "type": "integer",
+                        "minimum": 0,
+                        "maximum": 23
+                      },
+                      "end": {
+                        "type": "integer",
+                        "minimum": 0,
+                        "maximum": 23
+                      }
+                    },
+                    "required": [
+                      "start",
+                      "end"
+                    ],
+                    "additionalProperties": false
+                  }
+                },
+                "additionalProperties": false
+              }
+            },
+            "required": [
+              "issuer",
+              "name"
+            ],
+            "additionalProperties": false
+          }
+        },
+        "max_permissions": {
+          "default": {},
+          "type": "object",
+          "propertyNames": {
+            "type": "string"
+          },
+          "additionalProperties": {
+            "type": "string",
+            "enum": [
+              "none",
+              "read",
+              "write"
+            ]
+          }
+        }
+      },
+      "required": [
+        "trust_policy_path",
+        "providers"
+      ],
+      "additionalProperties": false
+    },
+    "origin": {
+      "default": {},
+      "type": "object",
+      "properties": {
+        "enabled": {
+          "default": false,
+          "type": "boolean"
+        },
+        "header_name": {
+          "type": "string"
+        },
+        "header_value_secret": {
+          "default": "GATE_ORIGIN_HEADER_VALUE",
+          "type": "string",
+          "minLength": 1
+        },
+        "header_value": {}
+      },
+      "additionalProperties": false
+    },
+    "audit": {
+      "default": {},
+      "type": "object",
+      "properties": {
+        "backend": {
+          "default": "log",
+          "type": "string"
+        }
+      },
+      "additionalProperties": false
+    },
+    "selector": {
+      "default": {},
+      "type": "object",
+      "properties": {
+        "type": {
+          "default": "memory",
+          "type": "string"
+        }
+      },
+      "additionalProperties": false
+    },
+    "revocation": {
+      "default": {},
+      "type": "object",
+      "properties": {
+        "key_secret": {
+          "default": "GATE_REVOCATION_KEYS",
+          "type": "string",
+          "minLength": 1
+        }
+      },
+      "additionalProperties": false
+    },
+    "github_apps": {
+      "minItems": 1,
+      "type": "array",
+      "items": {
+        "type": "object",
+        "properties": {
+          "client_id": {
+            "type": "string",
+            "minLength": 1
+          },
+          "organization": {
+            "type": "string",
+            "minLength": 1
+          },
+          "private_key_secret": {
+            "type": "string"
+          },
+          "private_key_path": {}
+        },
+        "required": [
+          "client_id",
+          "organization"
+        ],
+        "additionalProperties": false
+      }
+    },
+    "server": {},
+    "aws_region": {},
+    "fips": {},
+    "otel": {}
+  },
+  "required": [
+    "policy",
+    "github_apps"
+  ],
+  "additionalProperties": false
+}
