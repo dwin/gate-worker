@@ -1,4 +1,6 @@
+import { createLogger } from "@gate/core";
 import { describe, expect, it } from "vitest";
+import { createApp } from "../../src/app.ts";
 import { startServer } from "./harness.ts";
 
 const SECURITY_HEADERS = {
@@ -108,6 +110,20 @@ describe("HTTP surface", () => {
       const server = await startServer({ origin });
       expect((await server.app.request("/health")).status).toBe(200);
     });
+  });
+
+  it("answers a timed-out request with the standard error body", async () => {
+    const app = createApp({
+      getRuntime: () => new Promise(() => undefined),
+      requestTimeoutMs: 20,
+      logger: createLogger({ level: "error", format: "json" }),
+    });
+    const response = await app.request("/api/v1/exchange", { method: "POST", body: "{}" });
+    expect(response.status).toBe(504);
+    const body = (await response.json()) as Record<string, unknown>;
+    expect(body).toMatchObject({ error_code: "INTERNAL_ERROR", error: "Request timed out" });
+    expect(body["request_id"]).toBe(response.headers.get("x-request-id"));
+    expect(response.headers.get("x-content-type-options")).toBe("nosniff");
   });
 
   it("returns 500 without details when secrets are missing", async () => {

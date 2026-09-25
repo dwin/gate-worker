@@ -20458,10 +20458,10 @@ function parseSuccess(text, io) {
   const permissions = candidate.permissions;
   const missing = [
     isNonEmptyString(candidate.token) ? void 0 : "token",
-    isNonEmptyString(candidate.expires_at) ? void 0 : "expires_at",
+    isNonEmptyString(candidate.expires_at) && Number.isFinite(Date.parse(candidate.expires_at)) ? void 0 : "expires_at",
     isNonEmptyString(candidate.matched_policy) ? void 0 : "matched_policy",
     isNonEmptyString(candidate.request_id) ? void 0 : "request_id",
-    typeof permissions === "object" && permissions !== null && !Array.isArray(permissions) && Object.values(permissions).every(isNonEmptyString) ? void 0 : "permissions"
+    typeof permissions === "object" && permissions !== null && !Array.isArray(permissions) && Object.values(permissions).every((level) => level === "read" || level === "write") ? void 0 : "permissions"
   ].filter((field) => field !== void 0);
   if (missing.length > 0) {
     throw new Error(`exchange succeeded but the response is malformed (${missing.join(", ")})`);

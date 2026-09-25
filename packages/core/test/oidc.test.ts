@@ -118,6 +118,25 @@ describe("OidcValidator", () => {
     expect(provider.requests.filter((path) => path === "/jwks")).toHaveLength(1);
   });
 
+  it("shares one rediscovery among concurrent callers once the cache is stale", async () => {
+    let clockMs = Date.now();
+    const clocked = new OidcValidator({
+      audience: provider.issuer,
+      issuers: [provider.issuer],
+      fetch: router.fetch,
+      clock: { now: () => clockMs },
+    });
+    await clocked.validate(await provider.token());
+    clockMs += 2 * 60 * 60 * 1000;
+    const issuedAt = Math.floor(clockMs / 1000);
+    const later = { iat: issuedAt, nbf: issuedAt, exp: issuedAt + 600 };
+    const tokens = await Promise.all([1, 2, 3].map(() => provider.token(later)));
+    await Promise.all(tokens.map((token) => clocked.validate(token)));
+    expect(provider.requests.filter((path) => path.endsWith("openid-configuration"))).toHaveLength(
+      2,
+    );
+  });
+
   it("rejects a plaintext jwks_uri from discovery", async () => {
     const provider2 = await FakeOidcProvider.create("https://plain-jwks.gate.test");
     const router2 = createFetchRouter({

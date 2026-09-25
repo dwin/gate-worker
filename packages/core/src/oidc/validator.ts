@@ -144,11 +144,14 @@ export class OidcValidator {
   #provider(issuer: string): Promise<Provider> {
     const cached = this.#providers.get(issuer);
     if (cached) {
-      return cached.then((provider) =>
-        this.#clock.now() - provider.fetchedAt < DISCOVERY_TTL_MS
-          ? provider
-          : this.#refresh(issuer),
-      );
+      return cached.then((provider) => {
+        if (this.#clock.now() - provider.fetchedAt < DISCOVERY_TTL_MS) {
+          return provider;
+        }
+        // Concurrent callers holding the same stale entry share whichever refresh started first.
+        const current = this.#providers.get(issuer);
+        return current !== undefined && current !== cached ? current : this.#refresh(issuer);
+      });
     }
     return this.#refresh(issuer);
   }

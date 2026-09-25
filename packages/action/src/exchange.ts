@@ -45,13 +45,15 @@ function parseSuccess(text: string, io: ActionIO): ExchangeResponseBody {
   const permissions = candidate.permissions;
   const missing = [
     isNonEmptyString(candidate.token) ? undefined : "token",
-    isNonEmptyString(candidate.expires_at) ? undefined : "expires_at",
+    isNonEmptyString(candidate.expires_at) && Number.isFinite(Date.parse(candidate.expires_at))
+      ? undefined
+      : "expires_at",
     isNonEmptyString(candidate.matched_policy) ? undefined : "matched_policy",
     isNonEmptyString(candidate.request_id) ? undefined : "request_id",
     typeof permissions === "object" &&
     permissions !== null &&
     !Array.isArray(permissions) &&
-    Object.values(permissions).every(isNonEmptyString)
+    Object.values(permissions).every((level) => level === "read" || level === "write")
       ? undefined
       : "permissions",
   ].filter((field) => field !== undefined);

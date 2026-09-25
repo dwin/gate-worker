@@ -128,6 +128,12 @@ describe("runExchange", () => {
       JSON.stringify({ ...SUCCESS, permissions: { contents: 1 } }),
       "(permissions)",
     ],
+    [
+      "an unknown permission level",
+      JSON.stringify({ ...SUCCESS, permissions: { contents: "admin" } }),
+      "(permissions)",
+    ],
+    ["an unparseable expiry", JSON.stringify({ ...SUCCESS, expires_at: "never" }), "(expires_at)"],
   ])(
     "fails without publishing outputs on %s from a successful response",
     async (_, body, error) => {

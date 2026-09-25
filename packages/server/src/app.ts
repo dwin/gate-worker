@@ -40,7 +40,23 @@ export function createApp(options: AppOptions): Hono<AppEnv> {
         ),
     }),
   );
-  app.use(timeout(REQUEST_TIMEOUT_MS));
+  app.use(
+    timeout(
+      options.requestTimeoutMs ?? REQUEST_TIMEOUT_MS,
+      // Hono's default is a bare 504; keep the API's error shape instead.
+      (context) =>
+        new HTTPException(504, {
+          res: Response.json(
+            errorBody(
+              ServiceErrorCode.InternalError,
+              "Request timed out",
+              String(context.get("requestId")),
+            ),
+            { status: 504 },
+          ),
+        }),
+    ),
+  );
 
   const api = new Hono<AppEnv>();
   api.use(async (context, next) => {

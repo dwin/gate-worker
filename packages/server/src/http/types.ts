@@ -18,6 +18,8 @@ export interface AppOptions {
   background?(context: Context, logger: Logger): Background;
   /** Logs failures that happen before a runtime exists. Defaults to JSON on the console. */
   logger?: Logger;
+  /** Request deadline. Defaults to upstream's 30 seconds; tests shorten it. */
+  requestTimeoutMs?: number;
 }
 
 export function errorBody(
