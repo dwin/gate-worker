@@ -1,0 +1,9 @@
+gate-worker
+Copyright 2026 Darwin Smith
+
+This product includes software derived from GATE (GitHub Authenticated Token
+Exchange), https://github.com/thomsonreuters/gate,
+Copyright 2026 Thomson Reuters, licensed under the Apache License, Version 2.0.
+
+Trust-policy test fixtures under packages/core/test/fixtures/policies are
+copied from that project and retain their original license headers.
