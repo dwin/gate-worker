@@ -5,5 +5,5 @@ This product includes software derived from GATE (GitHub Authenticated Token
 Exchange), https://github.com/thomsonreuters/gate,
 Copyright 2026 Thomson Reuters, licensed under the Apache License, Version 2.0.
 
-Trust-policy test fixtures under packages/core/test/fixtures/policies are
+Trust-policy test fixtures under packages/testkit/fixtures/policies are
 copied from that project and retain their original license headers.

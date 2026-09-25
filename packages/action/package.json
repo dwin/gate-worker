@@ -1,0 +1,22 @@
+{
+  "name": "@gate/action",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "license": "Apache-2.0",
+  "description": "GitHub Action that exchanges the workflow's OIDC token for a short-lived GitHub App token from a GATE server.",
+  "scripts": {
+    "build": "node scripts/build.ts",
+    "typecheck": "tsc -p tsconfig.json",
+    "test": "vitest run"
+  },
+  "dependencies": {
+    "@actions/core": "catalog:"
+  },
+  "devDependencies": {
+    "@gate/core": "workspace:*",
+    "@types/node": "catalog:",
+    "esbuild": "catalog:",
+    "vitest": "catalog:"
+  }
+}

@@ -1,0 +1,55 @@
+name: End-to-end
+
+# Proves the whole chain against a real deployment: the bundled action exchanges
+# this workflow's OIDC token, the token reads a file from the target repository,
+# and after its TTL the revocation queue has killed it. Runs once the repository
+# variables GATE_ENDPOINT and GATE_E2E_REPOSITORY are set; the target repository
+# needs a trust policy that admits this workflow with contents: read.
+
+on:
+  workflow_dispatch:
+  workflow_run:
+    workflows: [Deploy]
+    types: [completed]
+
+permissions:
+  contents: read
+  id-token: write
+
+jobs:
+  exchange-use-revoke:
+    if: vars.GATE_ENDPOINT != '' && vars.GATE_E2E_REPOSITORY != '' && (github.event_name != 'workflow_run' || github.event.workflow_run.conclusion == 'success')
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - name: Exchange OIDC token for a 60-second GitHub token
+        id: gate
+        uses: ./
+        with:
+          endpoint: ${{ vars.GATE_ENDPOINT }}
+          repository: ${{ vars.GATE_E2E_REPOSITORY }}
+          permissions: |
+            contents: read
+          ttl: "60"
+          # Leave revocation to the server so this job can observe it.
+          revoke-on-completion: "false"
+      - name: The token works
+        env:
+          GH_TOKEN: ${{ steps.gate.outputs.token }}
+          REPOSITORY: ${{ vars.GATE_E2E_REPOSITORY }}
+        run: gh api "repos/$REPOSITORY" --jq .full_name
+      - name: The token is revoked after its TTL
+        env:
+          GH_TOKEN: ${{ steps.gate.outputs.token }}
+          REPOSITORY: ${{ vars.GATE_E2E_REPOSITORY }}
+        run: |
+          for attempt in $(seq 1 12); do
+            sleep 15
+            status=$(curl -s -o /dev/null -w '%{http_code}' -H "Authorization: Bearer $GH_TOKEN" "https://api.github.com/repos/$REPOSITORY")
+            echo "attempt $attempt: HTTP $status"
+            if [ "$status" = "401" ]; then
+              exit 0
+            fi
+          done
+          echo "::error::token still valid 3 minutes after a 60-second TTL"
+          exit 1

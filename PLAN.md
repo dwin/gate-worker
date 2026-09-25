@@ -1,6 +1,9 @@
 # GATE on Cloudflare Workers: POC plan
 
-Status: proposal, revision 3, 2026-09-25. Nothing here is built yet.
+Status: revision 4, 2026-09-25. The POC is built. M0 to M5 are complete and
+tested; M6 (the GitHub Action) is built and tested, and its end-to-end workflow
+is ready but has not run, because it needs a Cloudflare account, a GitHub App,
+and a deployed Worker. §0 records what the build changed relative to this plan.
 
 Upstream: [thomsonreuters/gate](https://github.com/thomsonreuters/gate) at commit
 `958af7c` (2026-09-03, "Support nested claim paths in policy conditions").
@@ -25,6 +28,61 @@ Direction and decisions so far:
 - Dependencies are the latest stable releases at M0, with the two ceilings
   named in §4.10, and Renovate keeps them current.
 - Code structure and linting follow the conventions in §4.9.
+- Tokens held for revocation are encrypted (§4.5), added in revision 4.
+
+## 0. What the build changed or discovered
+
+Changes to the design:
+
+- **Revocation jobs are sealed with AES-256-GCM** (§4.5). The raw token never
+  sits in the queue in plaintext.
+- **Server code is grouped by platform** under `src/platforms/<name>/`. The
+  Cloudflare folder has its own tsconfig with only Workers typings, because
+  Workers and Node typings declare conflicting `Response` and `URL` types and
+  made lint and `tsc` disagree.
+- **Portable in-memory adapters live in core** (`adapters/memory`), since they
+  need nothing beyond standard JavaScript. Platform adapters stay in the server.
+- **A private `@gate/testkit` package** holds the fake GitHub, fake OIDC
+  provider, and upstream fixtures, shared by core, server, and workerd tests.
+- **Package fences use `no-restricted-imports`, `no-restricted-globals`, and
+  `import-x/no-extraneous-dependencies`** instead of `eslint-plugin-boundaries`.
+  The rules are explicit and cannot drift from the plugin's API.
+- **Security headers and request IDs are small custom middlewares.** Hono's
+  `secureHeaders` adds headers upstream does not send and always sends HSTS;
+  its `requestId` adopts client-supplied IDs, which would let callers choose
+  audit keys.
+- **No compatibility flags.** Nothing needs `nodejs_compat`.
+
+Hardening beyond upstream:
+
+- A token whose revocation cannot be scheduled, or whose audit record cannot be
+  written, is revoked immediately and never returned.
+- Request IDs are always server-generated.
+- Unknown config keys, secrets written into config, and invalid claim regexes
+  fail the build.
+
+Upstream issues found while porting its tests:
+
+- **Upstream's integration fake cannot mint tokens.** It serves installations at
+  `/repos/{owner}/{repo}/installation`, but the client calls
+  `/orgs/{org}/installation` and `/users/{user}/installation`. The testkit fake
+  serves the endpoints the client really calls.
+- **A token without `sub` returns 500 in upstream production.** Upstream's audit
+  validation requires a caller, and its `TestOIDC_MissingSubjectSucceeds` passes
+  only because the harness's mock audit backend skips validation. Here the
+  caller is recorded as `(missing sub claim)` and the exchange succeeds.
+- **Upstream retries every 4xx**, including deterministic 404 and 422, which adds
+  about 14 s to a missing trust policy. Kept for parity; the policy is a
+  `RetryPolicy` option if you want to narrow it.
+
+Measured:
+
+| Item           | Value                                |
+| -------------- | ------------------------------------ |
+| Tests, Node    | 149 core, 152 integration, 15 action |
+| Tests, workerd | 5                                    |
+| Tests, Bun     | the same 152 integration tests       |
+| Worker bundle  | 1.4 MiB, 274 KiB gzipped             |
 
 ## 1. Recommendation in one paragraph
 
@@ -77,7 +135,7 @@ Request path in `internal/sts/sts.go`:
    exhausted return 429 with `Retry-After`).
 8. Mint installation token: App JWT (RS256, `iat` backdated 5 s, `exp` 10 min)
    → find installation for org (fall back to user) → `POST
-   /app/installations/{id}/access_tokens` with `repositories:[repo]` and
+/app/installations/{id}/access_tokens` with `repositories:[repo]` and
    `permissions`. Every GitHub call goes through a retrying transport: 4
    attempts, 2 s/4 s/8 s backoff capped at 10 s, retries on any 4xx/5xx or
    network error. A freshly minted contents token is also held 2 s before first
@@ -131,9 +189,10 @@ packages/action      GitHub Action; imports request/response types from core
 
 Rules that keep this honest:
 
-- `packages/core` is fenced by ESLint (`eslint-plugin-boundaries`) so it
-  cannot import `node:*`, `cloudflare:*`, `hono`, or any package outside its
-  allowlist. If it compiles and lints, it is portable.
+- `packages/core` is fenced by ESLint (`no-restricted-imports` and
+  `no-restricted-globals`) so it cannot import `node:*`, `cloudflare:*`, or
+  `hono`, or touch `process` or `Buffer`. Its tsconfig uses only the
+  `WebWorker` lib. If it compiles and lints, it is portable.
 - Every outbound network call takes `fetch` from the `Runtime`, never the
   global. Tests inject a fake; production injects the platform's.
 - The Hono app is created by `createApp(runtime)` and exported as a plain
@@ -141,17 +200,17 @@ Rules that keep this honest:
 
 ### 3.1 Ports and their adapters
 
-| Port | Used for | Portable default (in POC) | Workers adapter (in POC) | Other adapters (post-POC) |
-|---|---|---|---|---|
-| `Fetch` | OIDC discovery/JWKS, GitHub API, object store | platform `fetch` | same | same |
-| `Clock` | time restrictions, TTL caps, JWT `iat`/`exp` | `Date.now` | same | same |
-| `SecretSource` | GitHub App keys, origin header value | environment variables | same; Worker secrets appear as env bindings | Secrets Store binding; AWS Secrets Manager or SSM (Lambda's env limit is 4 KB total) |
-| `Cache` | policy cache (5 min, 500), installation IDs (24 h, 1000), discovery docs | in-process `Map` with TTL and size cap, plus in-process promise dedupe (singleflight) | same (per isolate) | optional L2 on Workers Cache API or KV |
-| `AppStateStore` | selector rate-limit state | in-process memory (upstream's own default) | same | Durable Object; Redis; DynamoDB |
-| `RevocationScheduler` | revoke tokens at capped expiry | `TimerRevocationScheduler`: in-process timers, one sweep per minute, upstream parity; suits Node and Bun | `QueueRevocationScheduler`: Cloudflare Queue message with `delaySeconds = ttl`, consumer revokes | `SweepRevocationScheduler`: pending tokens in the object store, a cron-driven `/internal/revoke-sweep` on Vercel Cron or EventBridge Scheduler |
-| `AuditSink` | see §4.6 | `LogAuditSink` (always on) | same | `ObjectStoreAuditSink` (R2/S3); R2-binding sink |
-| `Background` | best-effort work after the response (denied audit, usage recording) | `FireAndForget` with error logging | `ctx.waitUntil` | Vercel: `waitUntil`; Lambda: collect and await before returning |
-| `Logger` | one structured JSON line per exchange, same fields as upstream `logExchange` | `console.log(JSON)` | same; Workers Logs indexes JSON | CloudWatch and Vercel both parse JSON lines |
+| Port                  | Used for                                                                     | Portable default (in POC)                                                                                | Workers adapter (in POC)                                                                         | Other adapters (post-POC)                                                                                                                      |
+| --------------------- | ---------------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------ | ---------------------------------------------------------------------------------------------------------------------------------------------- |
+| `Fetch`               | OIDC discovery/JWKS, GitHub API, object store                                | platform `fetch`                                                                                         | same                                                                                             | same                                                                                                                                           |
+| `Clock`               | time restrictions, TTL caps, JWT `iat`/`exp`                                 | `Date.now`                                                                                               | same                                                                                             | same                                                                                                                                           |
+| `SecretSource`        | GitHub App keys, origin header value                                         | environment variables                                                                                    | same; Worker secrets appear as env bindings                                                      | Secrets Store binding; AWS Secrets Manager or SSM (Lambda's env limit is 4 KB total)                                                           |
+| `Cache`               | policy cache (5 min, 500), installation IDs (24 h, 1000), discovery docs     | in-process `Map` with TTL and size cap, plus in-process promise dedupe (singleflight)                    | same (per isolate)                                                                               | optional L2 on Workers Cache API or KV                                                                                                         |
+| `AppStateStore`       | selector rate-limit state                                                    | in-process memory (upstream's own default)                                                               | same                                                                                             | Durable Object; Redis; DynamoDB                                                                                                                |
+| `RevocationScheduler` | revoke tokens at capped expiry                                               | `TimerRevocationScheduler`: in-process timers, one sweep per minute, upstream parity; suits Node and Bun | `QueueRevocationScheduler`: Cloudflare Queue message with `delaySeconds = ttl`, consumer revokes | `SweepRevocationScheduler`: pending tokens in the object store, a cron-driven `/internal/revoke-sweep` on Vercel Cron or EventBridge Scheduler |
+| `AuditSink`           | see §4.6                                                                     | `LogAuditSink` (always on)                                                                               | same                                                                                             | `ObjectStoreAuditSink` (R2/S3); R2-binding sink                                                                                                |
+| `Background`          | best-effort work after the response (denied audit, usage recording)          | `FireAndForget` with error logging                                                                       | `ctx.waitUntil`                                                                                  | Vercel: `waitUntil`; Lambda: collect and await before returning                                                                                |
+| `Logger`              | one structured JSON line per exchange, same fields as upstream `logExchange` | `console.log(JSON)`                                                                                      | same; Workers Logs indexes JSON                                                                  | CloudWatch and Vercel both parse JSON lines                                                                                                    |
 
 ### 3.2 Compiled configuration
 
@@ -266,10 +325,28 @@ message per issued token; max delay 24 h against upstream's default
 the Free plan). The object-store sweep adapter for Lambda and Vercel is
 designed but not built in the POC.
 
-Trade-off stated plainly: any durable design stores the raw token until
-expiry, because `DELETE /installation/token` authenticates with the token
-itself. Upstream holds it in process memory. Queue storage is encrypted at
-rest; that is the accepted residual.
+Any durable design must store the token until expiry, because `DELETE
+/installation/token` authenticates with the token itself. Upstream holds it in
+process memory. Here every job is sealed before it leaves the service:
+
+- **Cipher:** AES-256-GCM through WebCrypto, with a fresh 96-bit IV per job.
+- **Bound metadata:** the job's version, key ID, token hash, GitHub App client
+  ID, and expiry are additional authenticated data. They stay readable for
+  operations, but altering any of them, or swapping ciphertexts between jobs,
+  fails decryption. After decryption the token's SHA-256 must match the hash.
+- **Keys:** one secret, `GATE_REVOCATION_KEYS`, holding comma-separated
+  `kid:base64(32 bytes)` entries. The first seals new jobs; all can open, so
+  rotation is: prepend a new key, deploy, and drop the old one after the
+  longest TTL has passed.
+- **Durable versus in-process:** a `RevocationStrategy` declares whether jobs
+  leave the process. Durable strategies (the queue) refuse to start without the
+  key secret. The in-process timer uses a random non-extractable key that
+  never leaves memory when no secret is set.
+- **Consumer behaviour:** malformed messages are acked and dropped; jobs that
+  fail to decrypt or revoke are retried and end in the dead-letter queue.
+
+Residual: anyone holding both the queue contents and the key secret can recover
+unexpired tokens. Keep the key only in Worker secrets (or Secrets Store later).
 
 ### 4.6 Audit: log sink in the POC, object-store sink designed for later
 
@@ -337,7 +414,8 @@ Structure:
 
 - Hexagonal: `core` owns the domain and the port interfaces; `server` owns
   adapters and HTTP; `action` owns the runner integration. Dependencies point
-  inward only, enforced by `eslint-plugin-boundaries`.
+  inward only, enforced by `no-restricted-imports` rules on `packages/core`
+  and by `import-x/no-extraneous-dependencies`.
 - Dependency injection through one `Runtime` object built once per process
   or isolate. No module-level mutable state except the explicitly named
   per-isolate caches, and those live behind the `Cache` port.
@@ -367,7 +445,8 @@ Linting and formatting:
   `switch-exhaustiveness-check`, `no-unnecessary-condition`. `no-explicit-any`
   and `consistent-type-assertions` as errors.
 - `eslint-plugin-import-x` for `no-cycle`, ordering, and `no-extraneous-dependencies`.
-- `eslint-plugin-boundaries` for the package fences above.
+- `no-restricted-imports` and `no-restricted-globals` on `packages/core` for
+  the package fences above.
 - Prettier for formatting; ESLint does not format.
 - `knip` for unused files, exports, and dependencies, run in CI.
 - `lefthook` runs typecheck, lint, format check, and the config compile on
@@ -397,83 +476,52 @@ Two ceilings exist today and are recorded in the catalog with a comment:
 
 ## 5. Repository layout
 
-pnpm workspaces, three packages.
+As built. pnpm workspaces, four packages.
 
 ```
 gate-worker/
-  action.yml                      # at the root so `uses: dwin/gate-worker@v1` works
-  LICENSE, NOTICE                 # Apache-2.0; NOTICE credits upstream
-  pnpm-workspace.yaml             # packages + catalog
-  package.json                    # root scripts: build, test, typecheck, lint, config:check
-  eslint.config.ts, .prettierrc, lefthook.yml, renovate.json, .editorconfig
-  PLAN.md
+  action.yml                  # root, so `uses: dwin/gate-worker@v1` works
+  LICENSE, NOTICE             # Apache-2.0; NOTICE credits upstream
+  pnpm-workspace.yaml         # packages, catalog, allowBuilds
+  eslint.config.js, knip.json, lefthook.yml, renovate.json, .prettierrc.json
   packages/
-    core/                         # @gate/core
+    core/                     # @gate/core: domain, ports, portable adapters
       src/
-        config/                   # schema.ts (zod), overrides.ts, keys.ts (PKCS#1→PKCS#8)
-        oidc/                     # validator.ts, discovery.ts
-        authorizer/               # central.ts, policy.ts (zod), match.ts, permission.ts,
-                                  # fetch.ts, claims.ts, errors.ts
-        github/                   # client.ts, jwt.ts, errors.ts
-        selector/                 # selector.ts
-        audit/                    # entry.ts (+validate), log.ts, audit-log.ts (fan-out)
-        sts/                      # service.ts, errors.ts (ExchangeError, code→status)
-        ports/                    # one file per port
-        util/                     # cache.ts, singleflight.ts, hash.ts, timing-safe-equal.ts
-      test/
-        fixtures/policies/        # upstream's 44 files, verbatim, Apache header kept
-        harness/                  # oidc.ts (RSA keypair, discovery+JWKS), github.ts (fake)
-        unit/
-    server/                       # @gate/server
-      config.yaml                 # central policy, upstream schema, $schema comment
-      config.schema.json          # generated
-      wrangler.jsonc              # build.command runs the config compile
-      scripts/compile-config.ts   # YAML → validate → config.generated.ts + JSON Schema
+        ports/                # FetchLike, Clock, SecretSource, Cache, AppStateStore,
+                              # RevocationScheduler, AuditSink, Background, Logger
+        adapters/memory/      # cache, app state, fire-and-forget, timer revocation
+        config/               # zod schema, compile, env overrides, PEM import
+        oidc/                 # allowlist-first validator on jose
+        authorizer/           # central policy, trust policy (zod + RE2), matching,
+                              # permissions, policy loader
+        github/               # thin App client, retry policy, errors
+        selector/             # rate-limit-aware App selection
+        audit/                # entry validation, fan-out log, log sink
+        revocation/           # sealed job schema, TokenSealer, Revoker
+        sts/                  # exchange service, wire types, status mapping
+        gate.ts               # composition root
+      test/                   # unit tests, own tsconfig with Node + DOM typings
+    testkit/                  # @gate/testkit (private): fakes and fixtures
+      fixtures/policies/      # upstream's fixtures, verbatim
+      src/                    # FakeGitHub, FakeOidcProvider, fetch router, keys
+    server/                   # @gate/server: Hono app and platforms
+      config.yaml             # central config, upstream schema
+      config.schema.json      # generated
+      wrangler.jsonc          # build.command compiles config before dev/deploy
+      scripts/                # compile-config.ts, bundle.ts
       src/
-        config.generated.ts       # generated, gitignored
-        app.ts                    # createApp(runtime): Hono app
-        http/                     # exchange.ts, info.ts, health.ts, origin-verify.ts
-        runtime.ts                # Runtime type: config + env + adapters
-        adapters/
-          memory/                 # cache, app-state, timer-revocation
-          cloudflare/             # queue-revocation.ts, background.ts
-          node/                   # background.ts
-        entry/
-          cloudflare.ts           # export default { fetch, queue }
-          node.ts                 # @hono/node-server
-          bun.ts                  # export default { fetch: app.fetch }
-          lambda.ts               # hono/aws-lambda handle()      (deploy post-POC)
-          vercel.ts               # hono/vercel handle()          (deploy post-POC)
+        app.ts, runtime.ts, http/
+        config.generated.ts   # generated, gitignored
+        platforms/
+          cloudflare/         # entry.ts, queue-revocation.ts, Workers-only tsconfig
+          node/ bun/ lambda/ vercel/   # entry.ts each
       test/
-        integration/              # runs on Node and Bun via app.request()
-        workers/                  # runs in workerd via @cloudflare/vitest-plugin
-    action/                       # gate GitHub Action
-      src/main.ts, post.ts, client.ts
-      dist/                       # committed; CI fails if stale
-      test/
-  .github/workflows/
-    checks.yml                    # matrix: node 24, bun; plus workerd suite; knip; action build check
-    deploy.yml                    # config:check then wrangler deploy on main
-    e2e.yml                       # uses the action against the dev deployment
-```
-
-`wrangler.jsonc` sketch:
-
-```jsonc
-{
-  "name": "gate",
-  "main": "src/entry/cloudflare.ts",
-  "compatibility_date": "2026-09-01",
-  "compatibility_flags": ["nodejs_compat"],
-  "build": { "command": "pnpm config:compile" },
-  "vars": { "GATE_LOGGER_LEVEL": "info" },
-  "queues": {
-    "producers": [{ "queue": "gate-revoke", "binding": "REVOKE" }],
-    "consumers": [{ "queue": "gate-revoke", "max_retries": 5, "dead_letter_queue": "gate-revoke-dlq" }]
-  },
-  "observability": { "enabled": true, "traces": { "enabled": true } },
-  "limits": { "cpu_ms": 30000 }
-}
+        integration/          # upstream suite port; runs on Node and Bun
+        workers/              # runs inside workerd
+    action/                   # @gate/action
+      src/                    # inputs, exchange, revoke, io port, main, post
+      dist/                   # committed; CI fails if stale
+  .github/workflows/          # checks.yml, deploy.yml, e2e.yml
 ```
 
 ## 6. The GitHub Action
@@ -504,14 +552,14 @@ Design:
 - JavaScript action, `runs.using: node24`. Node 20 was removed from GitHub
   runners on 2026-09-23, so `node24` is the only supported choice.
 - Main step: `core.getIDToken(audience)` (requires `id-token: write`), `POST
-  {endpoint}/api/v1/exchange`, `core.setSecret(token)` before setting any
+{endpoint}/api/v1/exchange`, `core.setSecret(token)` before setting any
   output, then outputs `token`, `expires-at`, `matched-policy`, `permissions`
   (JSON), `request-id`. Errors surface as `core.setFailed("<error_code>:
-  <error> (request_id ...)")` so a denial is diagnosable from the job log
+<error> (request_id ...)")` so a denial is diagnosable from the job log
   without server access. Retries only on 429 (honouring `Retry-After`) and
   502/503/504, bounded by a `timeout` input.
 - Post step (`revoke-on-completion`, default `true`): `DELETE
-  {api-url}/installation/token` with the token, so the token dies at job end
+{api-url}/installation/token` with the token, so the token dies at job end
   regardless of TTL. The token crosses to the post step through
   `core.saveState`, the same pattern `actions/checkout` uses for its auth
   token.
@@ -537,10 +585,10 @@ Design:
 
 Each milestone ends with green CI. "Done when" is the acceptance test.
 
-### M0: Monorepo scaffold, tooling, three runtimes (1.5 days)
+### M0: Monorepo scaffold, tooling, three runtimes (1.5 days). Done
 
 pnpm workspaces with a catalog; TypeScript 6.x with the flags in §4.9; ESLint
-10 with `typescript-eslint`, `import-x`, `boundaries`; Prettier; `knip`;
+10 with `typescript-eslint` and `import-x`; Prettier; `knip`;
 `lefthook`; Renovate; Hono; Wrangler 4.x; `@cloudflare/vitest-plugin` 1.x with
 Vitest 4.x; esbuild. `createApp()` with `/health` and `/api/v1/info`;
 middleware chain; entries for Cloudflare, Node, Bun. The first commit that
@@ -550,7 +598,7 @@ Done when: CI starts the app on Node 24, on Bun, and in workerd, each serves
 `/health` with the identical upstream security-header set, and lint,
 typecheck, and `knip` are clean.
 
-### M1: Compiled config and trust-policy schema (1.5 days)
+### M1: Compiled config and trust-policy schema (1.5 days). Done
 
 zod schemas for the central config and the trust-policy file, porting the
 rules and messages of `internal/config/*.go` and
@@ -565,7 +613,7 @@ fixture upstream expects to fail (`missing_*`, `invalid_*`, `wrong_*`,
 `valid.yaml` passes; an in-test PKCS#1 key and its PKCS#8 form both import and
 produce the same JWT signature.
 
-### M2: Authorizer (1 day)
+### M2: Authorizer (1 day). Done
 
 Port `authorizer.go`, `provider.go`, `match.go`, `permission.go`, dotted claim
 lookup, with `re2js` for every pattern. Pure functions; the policy fetch is a
@@ -577,7 +625,7 @@ fixtures with `{{ISSUER_URL}}` substituted, the full `deniedPermissions` list
 rejects with `NON_REPOSITORY_PERMISSION`, and a known catastrophic pattern
 completes in bounded time.
 
-### M3: OIDC validator (1 day)
+### M3: OIDC validator (1 day). Done
 
 `jose` discovery + JWKS + verify, allowlist first. Port
 `internal/testutil/oidc.go` to a harness that generates an RSA keypair per run
@@ -586,7 +634,7 @@ and answers discovery and JWKS through the injected `fetch`.
 Done when: upstream's 11 `TestOIDC_*` cases pass and the untrusted-issuer test
 asserts the injected `fetch` was never called.
 
-### M4: GitHub client, exchange service, HTTP handler (2 days)
+### M4: GitHub client, exchange service, HTTP handler (2 days). Done
 
 Thin client with retry transport, caches, and a token-ready delay that tests
 set to zero. Port `test/integration/harness/github.go` to a fake GitHub that
@@ -599,7 +647,7 @@ Done when: `TestSuccess_*`, `TestDiscovery_*`, `TestGitHub_*`,
 one test with its documented status; `TestDiscovery_ConcurrentRequests` shows
 one policy fetch for N parallel requests.
 
-### M5: Log audit, revocation, first deploy (1 day)
+### M5: Log audit, revocation, first deploy (1 day). Done except the deploy
 
 `LogAuditSink` and the fan-out with required/background semantics;
 `TimerRevocationScheduler`; `QueueRevocationScheduler` and the queue consumer;
@@ -611,7 +659,7 @@ with the upstream field set before the response is returned; a denied exchange
 produces its line through `waitUntil`; and a queue message is delivered after
 the TTL and the fake GitHub records the revoke.
 
-### M6: GitHub Action and end-to-end proof (1.5 days)
+### M6: GitHub Action and end-to-end proof (1.5 days). Built; end-to-end run pending
 
 Build the action, commit `dist/`, add the root `action.yml`, and add
 `e2e.yml` running against the dev deployment.
@@ -665,19 +713,19 @@ across so a reviewer can diff the two suites by name.
 
 ## 9. Risks and resolved decisions
 
-| Risk | Impact | Mitigation |
-|---|---|---|
-| `re2js` semantics diverge from Go `regexp` on some construct | Policy matches differ from upstream | Parity test over all fixture patterns; both are RE2 syntax |
-| Free-plan 10 ms CPU cap | 5xx on cold start or large policies | Measure in M4; move to Paid |
+| Risk                                                                              | Impact                                  | Mitigation                                                               |
+| --------------------------------------------------------------------------------- | --------------------------------------- | ------------------------------------------------------------------------ |
+| `re2js` semantics diverge from Go `regexp` on some construct                      | Policy matches differ from upstream     | Parity test over all fixture patterns; both are RE2 syntax               |
+| Free-plan 10 ms CPU cap                                                           | 5xx on cold start or large policies     | Measure in M4; move to Paid                                              |
 | Worst case per exchange: 4 retries × up to 10 s + 2 s ready delay per GitHub call | Client timeouts during GitHub incidents | Same as upstream; action `timeout` input; consider lowering `MaxBackoff` |
-| PKCS#1 key import | Deploy-time failure | Runtime wrapper, tested in M1 with a real PKCS#1 key |
-| `typescript-eslint` lags TypeScript 7 | Cannot adopt TS 7 yet | Stay on 6.x; Renovate flags the unblock |
-| Lambda env limit 4 KB total | Cannot hold an RSA key plus other vars | Secrets Manager `SecretSource` before any Lambda deploy |
-| Raw token at rest in the queue | Residual per §4.5 | Accept for POC |
-| In-process revocation on Node/Bun lost on restart | Some tokens live to GitHub's 1 h | Same as upstream; sweep adapter fixes it |
-| Token in the action's `STATE_` env for the post step | Visible to later steps of the same job | Standard pattern (`actions/checkout`); documented |
-| Workers Traces beta, billable 2026-10-01 | Cost surprise | Head sampling; logs are the primary signal |
-| No FIPS on any of these runtimes | Blocks regulated deployments | Out of scope; state it in README |
+| PKCS#1 key import                                                                 | Deploy-time failure                     | Runtime wrapper, tested in M1 with a real PKCS#1 key                     |
+| `typescript-eslint` lags TypeScript 7                                             | Cannot adopt TS 7 yet                   | Stay on 6.x; Renovate flags the unblock                                  |
+| Lambda env limit 4 KB total                                                       | Cannot hold an RSA key plus other vars  | Secrets Manager `SecretSource` before any Lambda deploy                  |
+| Token held in the queue until revocation                                          | Readable by anyone with queue access    | Sealed with AES-256-GCM (§4.5); key only in Worker secrets               |
+| In-process revocation on Node/Bun lost on restart                                 | Some tokens live to GitHub's 1 h        | Same as upstream; sweep adapter fixes it                                 |
+| Token in the action's `STATE_` env for the post step                              | Visible to later steps of the same job  | Standard pattern (`actions/checkout`); documented                        |
+| Workers Traces beta, billable 2026-10-01                                          | Cost surprise                           | Head sampling; logs are the primary signal                               |
+| No FIPS on any of these runtimes                                                  | Blocks regulated deployments            | Out of scope; state it in README                                         |
 
 Resolved:
 
@@ -686,9 +734,11 @@ Resolved:
 3. GitHub Enterprise Server: out of scope for the POC.
 4. Action reference form: root `action.yml`, `dist/` committed.
 5. Single GitHub App in the POC with the memory selector.
+6. Tokens held for revocation are encrypted (§4.5).
 
-Nothing else is blocking. Marketplace listing for the action can be decided
-when M6 lands.
+To finish M5 and M6 you need a Cloudflare account, a GitHub App installed on a
+test organization, and the repository variables and secrets listed in the
+README. Marketplace listing for the action can be decided after that run.
 
 ## Sources checked for platform facts
 
@@ -729,6 +779,6 @@ when M6 lands.
   @hono/node-server 2.1.1, jose 6.2.12, yaml 2.9.1, re2js 2.8.6, zod 4.6.5,
   aws4fetch 1.0.20, @actions/core 3.0.1, esbuild 0.28.2, pnpm 12.6.0, eslint
   10.11.0, typescript-eslint 8.70.1, eslint-plugin-import-x 4.17.1,
-  eslint-plugin-boundaries 7.2.0, prettier 3.9.9, knip 6.38.0, lefthook
+  prettier 3.9.9, knip 6.38.0, lefthook
   2.1.14, typescript 6.0.3 (latest 6.x), vitest 5.0.1 (unsupported by the
   Cloudflare plugin), typescript 7.0.2 (unsupported by typescript-eslint).

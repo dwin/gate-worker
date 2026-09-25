@@ -1,0 +1,61 @@
+name: GATE token exchange
+description: Exchange this workflow's OIDC token for a short-lived, repository-scoped GitHub App token from a GATE server.
+author: gate-worker
+branding:
+  icon: key
+  color: blue
+
+inputs:
+  endpoint:
+    description: Base URL of the GATE server, for example https://gate.example.com.
+    required: true
+  repository:
+    description: Target repository (owner/repo) the token is scoped to.
+    default: ${{ github.repository }}
+  policy-name:
+    description: Trust policy to use. Required when the server sets require_explicit_policy.
+    default: ""
+  permissions:
+    description: |
+      Requested permissions, one "name: level" per line (or a JSON object).
+      Defaults to everything the matched trust policy grants.
+    default: ""
+  ttl:
+    description: Requested token lifetime in seconds. Defaults to the server's default.
+    default: ""
+  audience:
+    description: OIDC audience the GATE server expects.
+    default: gate
+  api-url:
+    description: GitHub API URL used to revoke the token when the job ends.
+    default: ${{ github.api_url }}
+  origin-header-name:
+    description: Header name for deployments behind origin verification.
+    default: ""
+  origin-header-value:
+    description: Header value for origin verification. Pass it from a secret.
+    default: ""
+  revoke-on-completion:
+    description: Revoke the token in a post step when the job finishes.
+    default: "true"
+  timeout:
+    description: Seconds to keep retrying rate-limited or unavailable responses.
+    default: "60"
+
+outputs:
+  token:
+    description: The installation token. Masked in logs.
+  expires-at:
+    description: RFC 3339 expiry, capped to the effective TTL.
+  matched-policy:
+    description: Name of the trust policy that matched.
+  permissions:
+    description: Granted permissions as a JSON object.
+  request-id:
+    description: Server request ID, for correlating with audit logs.
+
+runs:
+  using: node24
+  main: packages/action/dist/main.js
+  post: packages/action/dist/post.js
+  post-if: always()
