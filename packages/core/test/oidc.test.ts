@@ -104,6 +104,22 @@ describe("OidcValidator", () => {
     expect(provider.requests.filter((path) => path === "/jwks")).toHaveLength(1);
   });
 
+  it("rejects a plaintext jwks_uri from discovery", async () => {
+    const provider2 = await FakeOidcProvider.create("https://plain-jwks.gate.test");
+    const router2 = createFetchRouter({
+      [provider2.origin]: () =>
+        Response.json({ issuer: provider2.issuer, jwks_uri: "http://keys.gate.test/jwks" }),
+    });
+    const strict = new OidcValidator({
+      audience: provider2.issuer,
+      issuers: [provider2.issuer],
+      fetch: router2.fetch,
+    });
+    await expect(strict.validate(await provider2.token({ aud: provider2.issuer }))).rejects.toThrow(
+      /jwks_uri must use https/,
+    );
+  });
+
   it("rejects a discovery document for a different issuer", async () => {
     const liar = await FakeOidcProvider.create("https://liar.gate.test");
     const lyingRouter = createFetchRouter({

@@ -119,6 +119,10 @@ export class GitHubAppClient {
 
   /** Mints an installation token scoped to one repository and permission set. */
   async requestToken(repository: string, permissions: Permissions): Promise<InstallationToken> {
+    if (Object.keys(permissions).length === 0) {
+      // GitHub treats an omitted permission set as "everything the App holds".
+      throw new Error("refusing to mint a repository token without explicit permissions");
+    }
     const [owner, repo] = splitRepository(repository);
     const installationId = await this.#installationId(owner);
     return this.#createInstallationToken(installationId, repo, permissions, repository);

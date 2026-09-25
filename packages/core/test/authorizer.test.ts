@@ -214,6 +214,17 @@ trust_policies:
     });
   });
 
+  it("omits none levels, since GitHub accepts only read and write, and denies an empty result", () => {
+    expect(resolvePermissions({ contents: "none", metadata: "read" }, readonly, max)).toEqual({
+      ok: true,
+      permissions: { metadata: "read" },
+    });
+    expect(resolvePermissions({ contents: "none" }, readonly, max)).toMatchObject({
+      ok: false,
+      denial: { code: "PERMISSION_DENIED", message: "no permissions to grant" },
+    });
+  });
+
   it("rejects every organization, user, and enterprise permission", () => {
     for (const permission of NON_REPOSITORY_PERMISSIONS.keys()) {
       expect(resolvePermissions({ [permission]: "read" }, readonly, max)).toMatchObject({

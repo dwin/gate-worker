@@ -104,6 +104,29 @@ describe("TestPermission", () => {
     });
   });
 
+  it("requested none levels are omitted from the minted token (added)", async () => {
+    const server = await startServer();
+    server.setupPolicy(DEFAULT_REPOSITORY, "contents_read_metadata_read.tpl.yaml");
+    const got = await server.exchange({
+      oidc_token: await server.oidc.token(),
+      target_repository: DEFAULT_REPOSITORY,
+      requested_permissions: { contents: "none", metadata: "read" },
+    });
+    expect(got.body["permissions"]).toEqual({ metadata: "read" });
+    const mint = server.github.requests
+      .filter((request) => request.path.endsWith("/access_tokens"))
+      .at(-1);
+    expect(mint?.body).toEqual({
+      permissions: { metadata: "read" },
+      repositories: ["example-repo"],
+    });
+  });
+
+  it("a request that is all none is denied rather than minting an unscoped token (added)", async () => {
+    const got = await run("contents_read_metadata_read.tpl.yaml", { contents: "none" });
+    expect(got.body["error_code"]).toBe("PERMISSION_DENIED");
+  });
+
   it("NonRepositoryPermission (added)", async () => {
     expect((await run("contents_read.tpl.yaml", { members: "read" })).body["error_code"]).toBe(
       "NON_REPOSITORY_PERMISSION",

@@ -129,7 +129,22 @@ export function resolvePermissions(
     if (orgDenial) {
       return { ok: false, denial: orgDenial };
     }
-    granted[permission] = level;
+    // GitHub's token endpoint accepts only read and write; "none" means "omit".
+    if (level !== "none") {
+      granted[permission] = level;
+    }
+  }
+  // An empty permission set would mint a token with every permission the App
+  // holds, so a request that reduces to nothing is denied instead.
+  if (Object.keys(granted).length === 0) {
+    return {
+      ok: false,
+      denial: deny(
+        DenialCode.PermissionDenied,
+        "no permissions to grant",
+        "every requested permission resolved to none",
+      ),
+    };
   }
   return { ok: true, permissions: granted };
 }

@@ -8,6 +8,7 @@ import {
 } from "jose";
 import type { Clock, FetchLike } from "../ports/index.ts";
 import { epochSeconds, systemClock } from "../util/time.ts";
+import { insecureUrlReason } from "../util/url.ts";
 
 /** Claims that upstream exposes as fields rather than in `Custom`. */
 const REGISTERED_CLAIMS = new Set(["iss", "sub", "aud", "exp", "nbf", "iat", "jti"]);
@@ -189,6 +190,11 @@ export class OidcValidator {
     }
     if (typeof document.jwks_uri !== "string") {
       throw new OidcValidationError(`discovering issuer ${issuer}: missing jwks_uri`);
+    }
+    // Signing keys fetched over plaintext could be substituted on the wire.
+    const jwksProblem = insecureUrlReason(document.jwks_uri);
+    if (jwksProblem !== undefined) {
+      throw new OidcValidationError(`discovering issuer ${issuer}: jwks_uri ${jwksProblem}`);
     }
     const advertised = Array.isArray(document.id_token_signing_alg_values_supported)
       ? document.id_token_signing_alg_values_supported.filter(

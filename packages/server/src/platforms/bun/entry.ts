@@ -1,4 +1,4 @@
-/** Bun entry: `bun src/entry/bun.ts`. Long-lived, with in-process revocation timers. */
+/** Bun entry: `bun packages/server/src/platforms/bun/entry.ts`. Long-lived, with in-process revocation timers. */
 import process from "node:process";
 import { timerRevocation } from "@gate/core";
 import { createApp } from "../../app.ts";

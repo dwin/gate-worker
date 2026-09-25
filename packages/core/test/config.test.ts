@@ -159,7 +159,7 @@ describe("compileCentralConfig", () => {
       "github_api_base_url must use https",
     );
     expect(issuesOf(withUrl("https://user:pw@ghes.example.com")).join("\n")).toContain(
-      "github_api_base_url must use https",
+      "github_api_base_url must not contain credentials",
     );
     expect(
       compileCentralConfig(withUrl("http://127.0.0.1:8080")).config.policy.github_api_base_url,
@@ -168,6 +168,22 @@ describe("compileCentralConfig", () => {
       compileCentralConfig(withUrl("https://ghes.example.com/api/v3")).config.policy
         .github_api_base_url,
     ).toBe("https://ghes.example.com/api/v3");
+  });
+
+  it("requires https provider issuers and rejects queries or fragments in URLs", () => {
+    expect(
+      issuesOf(
+        MINIMAL.replace("issuer: https://token.actions", "issuer: http://token.actions"),
+      ).join("\n"),
+    ).toContain("provider issuer must use https");
+    const withUrl = (url: string) =>
+      MINIMAL.replace("  trust_policy_path", `  github_api_base_url: ${url}\n  trust_policy_path`);
+    expect(issuesOf(withUrl('"https://ghes.example.com/api/v3?x=1"')).join("\n")).toContain(
+      "must not contain a query or fragment",
+    );
+    expect(issuesOf(withUrl('"https://ghes.example.com/api/v3#frag"')).join("\n")).toContain(
+      "must not contain a query or fragment",
+    );
   });
 
   it("reports YAML syntax errors", () => {

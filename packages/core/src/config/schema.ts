@@ -12,6 +12,7 @@
 import { z } from "zod";
 import { PERMISSION_LEVELS } from "../authorizer/permission-levels.ts";
 import { patternError } from "../util/regex.ts";
+import { insecureUrlReason } from "../util/url.ts";
 
 const requiredString = (message: string) =>
   z.string({ error: (issue) => (issue.input === undefined ? message : undefined) }).min(1, message);
@@ -31,16 +32,14 @@ const WEEKDAYS = [
   "Sunday",
 ] as const;
 
-const LOOPBACK_HOSTS = new Set(["localhost", "127.0.0.1", "[::1]"]);
-
-/** App JWTs and installation tokens are sent to this URL, so it must not be plaintext. */
-function isSecureBaseUrl(value: string): boolean {
-  const url = new URL(value);
-  if (url.username || url.password) {
-    return false;
-  }
-  return url.protocol === "https:" || LOOPBACK_HOSTS.has(url.hostname);
-}
+/** A URL that credentials are sent to or trust material is fetched from. */
+const secureUrl = (field: string) =>
+  z.string().superRefine((value, context) => {
+    const reason = insecureUrlReason(value);
+    if (reason !== undefined) {
+      context.addIssue({ code: "custom", message: `${field} ${reason}` });
+    }
+  });
 
 const hour = (message: string) => z.int(message).min(0, message).max(23, message);
 
@@ -66,7 +65,7 @@ const claimPatterns = z
   });
 
 const providerSchema = z.strictObject({
-  issuer: requiredString("provider issuer is required"),
+  issuer: requiredString("provider issuer is required").pipe(secureUrl("provider issuer")),
   name: requiredString("provider name is required"),
   required_claims: claimPatterns,
   forbidden_claims: claimPatterns,
@@ -90,13 +89,7 @@ const policySchema = z
     default_token_ttl: z.int().positive("default token TTL must be positive").default(900),
     max_token_ttl: z.int().positive("max token TTL must be positive").default(3600),
     require_explicit_policy: z.boolean().default(false),
-    github_api_base_url: z
-      .url({ protocol: /^https?$/, error: "github_api_base_url must be an http(s) URL" })
-      .refine(isSecureBaseUrl, {
-        error:
-          "github_api_base_url must use https (plain http is allowed only for localhost, 127.0.0.1, or [::1]) and must not contain credentials",
-      })
-      .default("https://api.github.com"),
+    github_api_base_url: secureUrl("github_api_base_url").default("https://api.github.com"),
     /** Accepted for upstream compatibility; unused, as upstream never reads it either. */
     github_raw_base_url: z.string().optional(),
     providers: z.array(providerSchema).min(1, "at least one provider is required"),

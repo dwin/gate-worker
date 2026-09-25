@@ -69,8 +69,7 @@
         },
         "github_api_base_url": {
           "default": "https://api.github.com",
-          "type": "string",
-          "format": "uri"
+          "type": "string"
         },
         "github_raw_base_url": {
           "type": "string"

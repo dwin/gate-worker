@@ -85,11 +85,13 @@ describe("GitHubAppClient.requestToken", () => {
 
   it("maps 404 and 422 on token creation to RepositoryNotFoundError", async () => {
     github.setError("/access_tokens", 422, "Unprocessable");
-    await expect(client.requestToken(REPO, {})).rejects.toBeInstanceOf(RepositoryNotFoundError);
+    await expect(client.requestToken(REPO, { contents: "read" })).rejects.toBeInstanceOf(
+      RepositoryNotFoundError,
+    );
   });
 
   it("reports a missing installation", async () => {
-    await expect(client.requestToken("nobody/repo", {})).rejects.toBeInstanceOf(
+    await expect(client.requestToken("nobody/repo", { contents: "read" })).rejects.toBeInstanceOf(
       InstallationNotFoundError,
     );
   });
@@ -98,7 +100,9 @@ describe("GitHubAppClient.requestToken", () => {
 describe("retry policy", () => {
   it("retries every 4xx/5xx up to four attempts, then returns the error", async () => {
     github.setError("/access_tokens", 500, "boom");
-    await expect(client.requestToken(REPO, {})).rejects.toBeInstanceOf(GitHubApiError);
+    await expect(client.requestToken(REPO, { contents: "read" })).rejects.toBeInstanceOf(
+      GitHubApiError,
+    );
     expect(github.count("/access_tokens")).toBe(4);
     expect(sleeps).toHaveLength(3);
   });
