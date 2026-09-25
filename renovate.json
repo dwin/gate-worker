@@ -1,0 +1,23 @@
+{
+  "$schema": "https://docs.renovatebot.com/renovate-schema.json",
+  "extends": ["config:recommended", "helpers:pinGitHubActionDigests", ":semanticCommitsDisabled"],
+  "schedule": ["before 6am on monday"],
+  "lockFileMaintenance": { "enabled": true },
+  "packageRules": [
+    {
+      "description": "Group minor and patch updates weekly; majors arrive as individual PRs.",
+      "matchUpdateTypes": ["minor", "patch"],
+      "groupName": "minor and patch dependencies"
+    },
+    {
+      "description": "@cloudflare/vitest-plugin 1.x pins vitest ^4.1.0.",
+      "matchPackageNames": ["vitest"],
+      "allowedVersions": "<5"
+    },
+    {
+      "description": "typescript-eslint 8.x supports typescript <6.1.0.",
+      "matchPackageNames": ["typescript"],
+      "allowedVersions": "<6.1"
+    }
+  ]
+}

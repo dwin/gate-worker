@@ -1,0 +1,35 @@
+{
+  "name": "gate-worker",
+  "private": true,
+  "type": "module",
+  "license": "Apache-2.0",
+  "packageManager": "pnpm@12.6.0",
+  "engines": {
+    "node": ">=22.18.0"
+  },
+  "scripts": {
+    "config:compile": "pnpm --filter @gate/server run config:compile",
+    "build": "pnpm config:compile && pnpm -r run build",
+    "typecheck": "pnpm config:compile && pnpm -r run typecheck",
+    "lint": "pnpm config:compile && eslint . --max-warnings=0",
+    "format": "prettier --write .",
+    "format:check": "prettier --check .",
+    "knip": "pnpm config:compile && knip",
+    "test": "pnpm config:compile && pnpm -r run test",
+    "test:bun": "pnpm config:compile && pnpm --filter @gate/server run test:bun",
+    "check": "pnpm format:check && pnpm lint && pnpm typecheck && pnpm knip && pnpm test",
+    "prepare": "lefthook install || true"
+  },
+  "devDependencies": {
+    "@eslint/js": "catalog:",
+    "eslint": "catalog:",
+    "eslint-config-prettier": "catalog:",
+    "eslint-import-resolver-typescript": "catalog:",
+    "eslint-plugin-import-x": "catalog:",
+    "knip": "catalog:",
+    "lefthook": "catalog:",
+    "prettier": "catalog:",
+    "typescript": "catalog:",
+    "typescript-eslint": "catalog:"
+  }
+}

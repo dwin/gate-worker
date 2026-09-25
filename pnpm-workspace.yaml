@@ -1,0 +1,47 @@
+packages:
+  - packages/*
+
+# One version per dependency across the workspace. Renovate updates this block.
+catalog:
+  # Runtime
+  hono: 4.13.9
+  "@hono/node-server": 2.1.1
+  jose: 6.2.12
+  re2js: 2.8.6
+  yaml: 2.9.1
+  zod: 4.6.5
+  "@actions/core": 3.0.1
+  # Cloudflare
+  wrangler: 4.139.0
+  "@cloudflare/workers-types": 5.20260925.1
+  "@cloudflare/vitest-plugin": 1.2.6
+  # Test. Vitest stays on 4.x: @cloudflare/vitest-plugin 1.2.6 pins vitest ^4.1.0.
+  vitest: 4.1.10
+  # Build
+  esbuild: 0.28.2
+  # TypeScript stays on 6.x: typescript-eslint 8.70.1 supports typescript <6.1.0.
+  typescript: 6.0.3
+  "@types/node": 24.13.6
+  # Lint and format
+  eslint: 10.11.0
+  "@eslint/js": 10.0.1
+  typescript-eslint: 8.70.1
+  eslint-plugin-import-x: 4.17.1
+  eslint-import-resolver-typescript: 4.4.5
+  eslint-config-prettier: 10.1.8
+  prettier: 3.9.9
+  knip: 6.38.0
+  lefthook: 2.1.14
+
+minimumReleaseAgeExclude:
+  - "@cloudflare/vitest-plugin@1.2.6"
+  - "@cloudflare/workers-types@5.20260925.1"
+  - miniflare@5.20260923.0-alpha
+  - wrangler@4.139.0
+
+# Packages allowed to run install scripts (native binaries only).
+allowBuilds:
+  esbuild: true
+  workerd: true
+  lefthook: true
+  unrs-resolver: true

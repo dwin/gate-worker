@@ -1,0 +1,9 @@
+node_modules/
+dist/
+!packages/action/dist/
+.wrangler/
+coverage/
+*.generated.ts
+.dev.vars
+*.tsbuildinfo
+.DS_Store
