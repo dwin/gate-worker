@@ -6,23 +6,17 @@ import { createApp } from "../../app.ts";
 import { compiledConfig } from "../../config.generated.ts";
 import { buildRuntime, memoizeRuntime } from "../../runtime.ts";
 
-const logger = createLogger({
-  level: compiledConfig.logger.level,
-  format: compiledConfig.logger.format,
-});
+/** Logs startup failures only; the runtime builds its own logger from the overridden config. */
+const bootstrapLogger = createLogger({ level: "info", format: compiledConfig.logger.format });
 const getRuntime = memoizeRuntime(() =>
-  buildRuntime({
-    config: compiledConfig,
-    env: process.env,
-    fetch,
-    revocation: timerRevocation(),
-    gate: { logger },
-  }),
+  buildRuntime({ config: compiledConfig, env: process.env, fetch, revocation: timerRevocation() }),
 );
 
 // Fail fast: a long-lived process should not start with bad secrets.
-await getRuntime().catch((error: unknown) => {
-  logger.error("startup failed", { error: error instanceof Error ? error.message : String(error) });
+const { logger } = await getRuntime().catch((error: unknown) => {
+  bootstrapLogger.error("startup failed", {
+    error: error instanceof Error ? error.message : String(error),
+  });
   process.exit(1);
 });
 

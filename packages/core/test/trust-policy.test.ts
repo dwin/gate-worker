@@ -19,7 +19,8 @@ function problems(yaml: string): string {
 describe("parseTrustPolicy with upstream fixtures", () => {
   // Same fixtures and expectations as upstream TestParsing_PolicyErrors, with the message upstream produces.
   it.each([
-    ["invalid_syntax.yaml", /parsing YAML|version is required/],
+    // Upstream's fixture is valid YAML despite its name; it fails schema validation.
+    ["invalid_syntax.yaml", /^version is required$/m],
     ["missing_version.yaml", /^version is required$/m],
     ["wrong_version.yaml", /unsupported trust policy version: 2\.0 \(expected 1\.0\)/],
     ["missing_name.yaml", /^policy 0 \(\): name is required$/m],
@@ -38,6 +39,10 @@ describe("parseTrustPolicy with upstream fixtures", () => {
     ["duplicate_policy_names.yaml", /duplicate policy name: default/],
   ])("%s fails with upstream's message", (fixture, expected) => {
     expect(problems(loadPolicyFixture(fixture))).toMatch(expected);
+  });
+
+  it("reports malformed YAML as a parse error", () => {
+    expect(problems('version: "1.0\ntrust_policies: []\n')).toMatch(/^parsing YAML:/);
   });
 
   it("an empty file fails like upstream (version is required)", () => {

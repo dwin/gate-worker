@@ -37,6 +37,14 @@ describe("AppSelector", () => {
     expect((await selector.select("org/repo")).clientId).toBe("a");
   });
 
+  it("treats an App as available again at the exact reset instant", async () => {
+    const store = new MemoryAppStateStore();
+    const selector = new AppSelector(apps, store, clock);
+    await selector.recordUsage("a", 0, new Date(NOW));
+    await selector.recordUsage("b", 0, new Date(NOW));
+    expect((await selector.select("org/repo")).clientId).toMatch(/^[ab]$/);
+  });
+
   it("reports Retry-After from the earliest reset when all Apps are exhausted", async () => {
     const store = new MemoryAppStateStore();
     const selector = new AppSelector(apps, store, clock);

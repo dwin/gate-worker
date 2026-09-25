@@ -79,7 +79,8 @@ export class AppSelector {
       if (state) {
         observed.push(state);
       }
-      if (!state || now > state.resetAt) {
+      // At or after the reset instant the window has renewed.
+      if (!state || now >= state.resetAt) {
         candidates.push({ app, remaining: Number.POSITIVE_INFINITY });
       } else if (state.remaining > 0) {
         candidates.push({ app, remaining: state.remaining });

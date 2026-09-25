@@ -24,6 +24,14 @@ describe("TestParsing", () => {
     expect(got.body["error_code"]).toBe("POLICY_LOAD_FAILED");
   });
 
+  it("malformed YAML fails with POLICY_LOAD_FAILED (added; upstream's invalid_syntax.yaml is valid YAML)", async () => {
+    const server = await startServer();
+    server.github.setPolicy(DEFAULT_REPOSITORY, 'version: "1.0\ntrust_policies: [\n');
+    server.github.setInstallation(DEFAULT_REPOSITORY);
+    const got = await server.exchangeDefault();
+    expect(got.body["error_code"]).toBe("POLICY_LOAD_FAILED");
+  });
+
   it("DeeplyNestedStructure", async () => {
     const server = await startServer();
     server.setupPolicy(DEFAULT_REPOSITORY, "deeply_nested.tpl.yaml");

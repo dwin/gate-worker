@@ -20370,14 +20370,18 @@ function positiveInteger(name, raw) {
   }
   return Number(raw);
 }
+function secureUrl(name, raw) {
+  const url = raw.trim().replace(/\/+$/, "");
+  if (!/^https?:\/\//.test(url)) {
+    throw new InputError(`${name}: expected an http(s) URL`);
+  }
+  if (url.startsWith("http://") && !/^http:\/\/(localhost|127\.0\.0\.1)(:|\/|$)/.test(url)) {
+    throw new InputError(`${name}: must use https (tokens would cross the network in plaintext)`);
+  }
+  return url;
+}
 function readInputs(io) {
-  const endpoint = io.getInput("endpoint").trim().replace(/\/+$/, "");
-  if (!/^https?:\/\//.test(endpoint)) {
-    throw new InputError("endpoint: expected an http(s) URL");
-  }
-  if (endpoint.startsWith("http://") && !/^http:\/\/(localhost|127\.0\.0\.1)(:|\/|$)/.test(endpoint)) {
-    throw new InputError("endpoint: must use https (tokens would cross the network in plaintext)");
-  }
+  const endpoint = secureUrl("endpoint", io.getInput("endpoint"));
   const repository = io.getInput("repository").trim();
   if (!REPOSITORY.test(repository)) {
     throw new InputError(`repository: expected owner/repo, got "${repository}"`);
@@ -20398,7 +20402,7 @@ function readInputs(io) {
     permissions: parsePermissions(io.getInput("permissions")),
     ttl: positiveInteger("ttl", io.getInput("ttl")),
     audience: io.getInput("audience").trim() || "gate",
-    apiUrl: (io.getInput("api-url").trim() || "https://api.github.com").replace(/\/+$/, ""),
+    apiUrl: secureUrl("api-url", io.getInput("api-url").trim() || "https://api.github.com"),
     originHeader: originName ? { name: originName, value: originValue } : void 0,
     revokeOnCompletion: revoke !== "false",
     timeoutMs: (positiveInteger("timeout", io.getInput("timeout")) ?? 60) * 1e3

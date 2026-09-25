@@ -180,6 +180,8 @@ describe("runExchange", () => {
 
   it.each([
     [{ endpoint: "http://gate.example.com" }, "must use https"],
+    [{ "api-url": "http://github.example.com/api/v3" }, "api-url: must use https"],
+    [{ "api-url": "github.example.com" }, "api-url: expected an http(s) URL"],
     [{ repository: "not-a-repo" }, "expected owner/repo"],
     [{ ttl: "-5" }, "positive integer"],
     [{ permissions: "contents: admin" }, "must be none, read, or write"],

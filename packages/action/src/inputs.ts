@@ -66,17 +66,20 @@ function positiveInteger(name: string, raw: string): number | undefined {
   return Number(raw);
 }
 
+/** Requires https, allowing plain http only for loopback, because tokens are sent to these URLs. */
+function secureUrl(name: string, raw: string): string {
+  const url = raw.trim().replace(/\/+$/, "");
+  if (!/^https?:\/\//.test(url)) {
+    throw new InputError(`${name}: expected an http(s) URL`);
+  }
+  if (url.startsWith("http://") && !/^http:\/\/(localhost|127\.0\.0\.1)(:|\/|$)/.test(url)) {
+    throw new InputError(`${name}: must use https (tokens would cross the network in plaintext)`);
+  }
+  return url;
+}
+
 export function readInputs(io: ActionIO): ActionInputs {
-  const endpoint = io.getInput("endpoint").trim().replace(/\/+$/, "");
-  if (!/^https?:\/\//.test(endpoint)) {
-    throw new InputError("endpoint: expected an http(s) URL");
-  }
-  if (
-    endpoint.startsWith("http://") &&
-    !/^http:\/\/(localhost|127\.0\.0\.1)(:|\/|$)/.test(endpoint)
-  ) {
-    throw new InputError("endpoint: must use https (tokens would cross the network in plaintext)");
-  }
+  const endpoint = secureUrl("endpoint", io.getInput("endpoint"));
   const repository = io.getInput("repository").trim();
   if (!REPOSITORY.test(repository)) {
     throw new InputError(`repository: expected owner/repo, got "${repository}"`);
@@ -97,7 +100,7 @@ export function readInputs(io: ActionIO): ActionInputs {
     permissions: parsePermissions(io.getInput("permissions")),
     ttl: positiveInteger("ttl", io.getInput("ttl")),
     audience: io.getInput("audience").trim() || "gate",
-    apiUrl: (io.getInput("api-url").trim() || "https://api.github.com").replace(/\/+$/, ""),
+    apiUrl: secureUrl("api-url", io.getInput("api-url").trim() || "https://api.github.com"),
     originHeader: originName ? { name: originName, value: originValue } : undefined,
     revokeOnCompletion: revoke !== "false",
     timeoutMs: (positiveInteger("timeout", io.getInput("timeout")) ?? 60) * 1000,
