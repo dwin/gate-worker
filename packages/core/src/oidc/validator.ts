@@ -174,6 +174,9 @@ export class OidcValidator {
     try {
       const response = await this.#fetch(url, {
         headers: { accept: "application/json" },
+        // A followed redirect could leave https, so any 3xx fails the `ok` check below.
+        // "manual" rather than "error": Workers' fetch does not support "error".
+        redirect: "manual",
         signal: AbortSignal.timeout(10_000),
       });
       if (!response.ok) {
@@ -205,8 +208,10 @@ export class OidcValidator {
     const fetchImpl = this.#fetch;
     return {
       keys: createRemoteJWKSet(new URL(document.jwks_uri), {
+        // jose already refuses anything but a 200; pinning "manual" keeps a redirect
+        // from ever being followed to an unvalidated key location.
         [customFetch]: (input: string | URL | Request, init?: RequestInit) =>
-          fetchImpl(input, init),
+          fetchImpl(input, { ...init, redirect: "manual" }),
       }),
       algorithms: advertised.length > 0 ? advertised : ["RS256"],
       fetchedAt: this.#clock.now(),

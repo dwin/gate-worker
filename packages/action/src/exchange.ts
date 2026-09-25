@@ -93,6 +93,8 @@ async function exchange(
         method: "POST",
         headers,
         body: JSON.stringify(body),
+        // A 307/308 would replay the OIDC token to a target secureUrl never checked.
+        redirect: "error",
         signal: AbortSignal.timeout(Math.max(1000, deadline - now())),
       });
     } catch (error) {

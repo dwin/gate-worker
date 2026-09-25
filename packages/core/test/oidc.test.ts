@@ -18,6 +18,20 @@ beforeEach(async () => {
 
 const now = () => Math.floor(Date.now() / 1000);
 
+/** Wraps a router with fetch's redirect modes, so tests see what a real fetch would do. */
+function withRedirects(inner: typeof router.fetch): typeof router.fetch {
+  const wrapped: typeof router.fetch = async (input, init) => {
+    const response = await inner(input, init);
+    const location = response.headers.get("location");
+    if (response.status < 300 || response.status >= 400 || location === null) return response;
+    if (init?.redirect === "error") throw new TypeError("fetch failed: unexpected redirect");
+    if (init?.redirect === "manual") return response;
+    const base = input instanceof Request ? input.url : String(input);
+    return wrapped(new URL(location, base).href, init);
+  };
+  return wrapped;
+}
+
 async function rejects(token: string, message?: RegExp): Promise<void> {
   const error = await validator.validate(token).catch((caught: unknown) => caught);
   expect(error).toBeInstanceOf(OidcValidationError);
@@ -118,6 +132,52 @@ describe("OidcValidator", () => {
     await expect(strict.validate(await provider2.token({ aud: provider2.issuer }))).rejects.toThrow(
       /jwks_uri must use https/,
     );
+  });
+
+  it("does not follow a discovery redirect to plaintext", async () => {
+    const moved = await FakeOidcProvider.create("https://moved.gate.test");
+    const redirecting = createFetchRouter({
+      [moved.origin]: () =>
+        new Response(null, {
+          status: 302,
+          headers: { location: "http://evil.gate.test/.well-known/openid-configuration" },
+        }),
+      "http://evil.gate.test": () =>
+        Response.json({ issuer: moved.issuer, jwks_uri: "https://evil.gate.test/jwks" }),
+    });
+    const strict = new OidcValidator({
+      audience: moved.issuer,
+      issuers: [moved.issuer],
+      fetch: withRedirects(redirecting.fetch),
+    });
+    await expect(strict.validate(await moved.token({ aud: moved.issuer }))).rejects.toThrow(
+      /discovering issuer .*HTTP 302/,
+    );
+    expect(redirecting.calls.some((call) => call.url.includes("evil.gate.test"))).toBe(false);
+  });
+
+  it("does not follow a JWKS redirect", async () => {
+    const hosted = await FakeOidcProvider.create("https://hosted.gate.test");
+    const impostor = await FakeOidcProvider.create(hosted.issuer);
+    const redirecting = createFetchRouter({
+      [hosted.origin]: (request) =>
+        new URL(request.url).pathname === "/jwks"
+          ? new Response(null, {
+              status: 302,
+              headers: { location: "http://evil.gate.test/jwks" },
+            })
+          : hosted.handle(request),
+      "http://evil.gate.test": (request) => impostor.handle(request),
+    });
+    const strict = new OidcValidator({
+      audience: hosted.issuer,
+      issuers: [hosted.issuer],
+      fetch: withRedirects(redirecting.fetch),
+    });
+    await expect(strict.validate(await impostor.token({ aud: hosted.issuer }))).rejects.toThrow(
+      OidcValidationError,
+    );
+    expect(redirecting.calls.some((call) => call.url.includes("evil.gate.test"))).toBe(false);
   });
 
   it("rejects a discovery document for a different issuer", async () => {

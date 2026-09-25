@@ -92,6 +92,7 @@ describe("runExchange", () => {
       "matched-policy": "ci-read",
       permissions: '{"contents":"read"}',
     });
+    expect(http.requests[0]?.init?.redirect).toBe("error");
     expect(fake.saved).toEqual({
       [STATE_TOKEN]: "ghs_secret",
       [STATE_API_URL]: "https://api.github.com",
