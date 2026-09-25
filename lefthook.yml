@@ -1,0 +1,16 @@
+# Mirrors CI's fast checks locally. Install with `pnpm install` (runs `lefthook install`).
+pre-commit:
+  parallel: true
+  commands:
+    format:
+      glob: "*.{ts,js,json,jsonc,yaml,yml,md}"
+      run: pnpm exec prettier --check {staged_files}
+    lint:
+      glob: "*.{ts,js}"
+      run: pnpm lint
+    typecheck:
+      glob: "*.ts"
+      run: pnpm typecheck
+    config:
+      glob: "config.yaml"
+      run: pnpm config:compile

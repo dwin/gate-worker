@@ -1,0 +1,56 @@
+# yaml-language-server: $schema=./config.schema.json
+#
+# GATE central configuration. Compiled and validated at build time
+# (`pnpm config:compile`, also run by `wrangler deploy`), so an invalid file
+# never deploys. Same schema as upstream GATE, except that secrets are named,
+# never stored: see `private_key_secret` and `origin.header_value_secret`.
+#
+# Deployed with the Deploy to Cloudflare button? The App client ID and
+# organization below are placeholders: the GATE_GITHUB_APP_CLIENT_ID and
+# GATE_GITHUB_ORGANIZATION secrets you entered replace them at runtime, and the
+# organization also replaces the repository_owner pattern below.
+
+logger:
+  level: info # debug | info | warn | error
+  format: json # json | text
+
+oidc:
+  audience: gate
+
+policy:
+  version: "1.0"
+  trust_policy_path: .github/gate/trust-policy.yaml
+  default_token_ttl: 900
+  max_token_ttl: 3600
+  require_explicit_policy: false
+  providers:
+    - issuer: https://token.actions.githubusercontent.com
+      name: GitHub Actions
+      required_claims:
+        # Only workflows from your organization may request tokens (upstream threat E3).
+        repository_owner:
+          pattern: "^example-org$"
+          description: Only workflows from example-org may request tokens
+  # Allowlist: only listed permissions can ever be granted. Keep
+  # `administration` out, or set it to none, to prevent escalation loops.
+  max_permissions:
+    contents: write
+    issues: write
+    pull_requests: write
+    packages: write
+    metadata: read
+    administration: none
+
+origin:
+  enabled: false
+  # header_name: X-Origin-Verify
+  # header_value_secret: GATE_ORIGIN_HEADER_VALUE
+
+revocation:
+  # Comma-separated `kid:base64(32 random bytes)`; the first key seals new jobs.
+  key_secret: GATE_REVOCATION_KEYS
+
+github_apps:
+  - client_id: Iv1.0000000000000000
+    organization: example-org
+    private_key_secret: GATE_GITHUB_APP_PRIVATE_KEY

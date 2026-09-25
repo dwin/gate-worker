@@ -1,0 +1,6 @@
+pnpm-lock.yaml
+packages/action/dist/
+packages/testkit/fixtures/
+**/*.generated.ts
+config.schema.json
+.wrangler/

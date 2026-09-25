@@ -1,0 +1,62 @@
+{
+  "name": "gate-worker",
+  "private": true,
+  "type": "module",
+  "description": "GATE (GitHub Authenticated Token Exchange) on Cloudflare Workers: exchange OIDC tokens for short-lived, repository-scoped GitHub App tokens.",
+  "license": "Apache-2.0",
+  "packageManager": "pnpm@10.34.4",
+  "engines": {
+    "node": ">=22.18.0"
+  },
+  "scripts": {
+    "config:compile": "node packages/server/scripts/compile-config.ts",
+    "build": "pnpm config:compile",
+    "build:all": "pnpm config:compile && pnpm -r run build",
+    "dev": "wrangler dev",
+    "deploy": "wrangler deploy",
+    "typecheck": "pnpm config:compile && pnpm -r run typecheck",
+    "lint": "pnpm config:compile && eslint . --max-warnings=0",
+    "format": "prettier --write .",
+    "format:check": "prettier --check .",
+    "knip": "pnpm config:compile && knip",
+    "test": "pnpm config:compile && pnpm -r run test",
+    "test:bun": "pnpm config:compile && pnpm --filter @gate/server run test:bun",
+    "check": "pnpm format:check && pnpm lint && pnpm typecheck && pnpm knip && pnpm test",
+    "prepare": "lefthook install || true"
+  },
+  "devDependencies": {
+    "@eslint/js": "catalog:",
+    "eslint": "catalog:",
+    "eslint-config-prettier": "catalog:",
+    "eslint-import-resolver-typescript": "catalog:",
+    "eslint-plugin-import-x": "catalog:",
+    "knip": "catalog:",
+    "lefthook": "catalog:",
+    "prettier": "catalog:",
+    "typescript": "catalog:",
+    "typescript-eslint": "catalog:",
+    "wrangler": "catalog:"
+  },
+  "cloudflare": {
+    "bindings": {
+      "GATE_GITHUB_APP_CLIENT_ID": {
+        "description": "Client ID of your GitHub App (starts with `Iv`), from the App's settings page."
+      },
+      "GATE_GITHUB_ORGANIZATION": {
+        "description": "GitHub organization or user the App is installed on. Only workflows from this owner can request tokens."
+      },
+      "GATE_GITHUB_APP_PRIVATE_KEY": {
+        "description": "The App's private key: paste the whole `.pem` file GitHub generated, including the BEGIN and END lines."
+      },
+      "GATE_REVOCATION_KEYS": {
+        "description": "Encrypts tokens awaiting revocation. Generate with `openssl rand -base64 32`."
+      },
+      "REVOKE": {
+        "description": "Queue that revokes each issued token when its TTL ends."
+      },
+      "REVOKE_DLQ": {
+        "description": "Dead-letter queue for revocations that keep failing."
+      }
+    }
+  }
+}
