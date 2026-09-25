@@ -118,6 +118,36 @@ describe("runExchange", () => {
     expect(http.requests).toHaveLength(1);
   });
 
+  it.each([
+    ["an empty object", "{}", "(token, expires_at, matched_policy, request_id, permissions)"],
+    ["a non-JSON body", "<html>ok</html>", "the response is not JSON"],
+    ["a JSON array", "[]", "the response is not a JSON object"],
+    [
+      "non-string permission levels",
+      JSON.stringify({ ...SUCCESS, permissions: { contents: 1 } }),
+      "(permissions)",
+    ],
+  ])(
+    "fails without publishing outputs on %s from a successful response",
+    async (_, body, error) => {
+      const fake = fakeIO(BASE_INPUTS);
+      const http = scriptedFetch([() => new Response(body, { status: 200 })]);
+      await runExchange(fake.io, http.fetch, noSleep);
+      expect(fake.failed()).toContain(error);
+      expect(fake.outputs).toEqual({});
+      expect(fake.saved).toEqual({});
+    },
+  );
+
+  it("masks a token that arrives in an otherwise malformed response", async () => {
+    const fake = fakeIO(BASE_INPUTS);
+    const http = scriptedFetch([() => Response.json({ token: "ghs_partial" })]);
+    await runExchange(fake.io, http.fetch, noSleep);
+    expect(fake.secrets).toContain("ghs_partial");
+    expect(fake.failed()).toContain("malformed");
+    expect(fake.outputs).toEqual({});
+  });
+
   it("retries 429 honoring Retry-After, and 5xx gateway errors", async () => {
     const fake = fakeIO(BASE_INPUTS);
     const waits: number[] = [];

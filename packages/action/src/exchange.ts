@@ -19,6 +19,48 @@ function describeFailure(status: number, text: string): string {
   return `HTTP ${String(status)}: ${text.slice(0, 200)}`;
 }
 
+function isNonEmptyString(value: unknown): value is string {
+  return typeof value === "string" && value !== "";
+}
+
+/**
+ * Checks a 2xx body before anything is published, so a proxy's `200 {}` fails the
+ * step instead of handing later steps an empty token. A token that did arrive is
+ * masked first, since the error path may still log parts of the response.
+ */
+function parseSuccess(text: string, io: ActionIO): ExchangeResponseBody {
+  let body: unknown;
+  try {
+    body = JSON.parse(text);
+  } catch {
+    throw new Error("exchange succeeded but the response is not JSON");
+  }
+  if (typeof body !== "object" || body === null || Array.isArray(body)) {
+    throw new Error("exchange succeeded but the response is not a JSON object");
+  }
+  const candidate = body as Partial<Record<keyof ExchangeResponseBody, unknown>>;
+  if (isNonEmptyString(candidate.token)) {
+    io.setSecret(candidate.token);
+  }
+  const permissions = candidate.permissions;
+  const missing = [
+    isNonEmptyString(candidate.token) ? undefined : "token",
+    isNonEmptyString(candidate.expires_at) ? undefined : "expires_at",
+    isNonEmptyString(candidate.matched_policy) ? undefined : "matched_policy",
+    isNonEmptyString(candidate.request_id) ? undefined : "request_id",
+    typeof permissions === "object" &&
+    permissions !== null &&
+    !Array.isArray(permissions) &&
+    Object.values(permissions).every(isNonEmptyString)
+      ? undefined
+      : "permissions",
+  ].filter((field) => field !== undefined);
+  if (missing.length > 0) {
+    throw new Error(`exchange succeeded but the response is malformed (${missing.join(", ")})`);
+  }
+  return candidate as unknown as ExchangeResponseBody;
+}
+
 async function exchange(
   inputs: ActionInputs,
   oidcToken: string,
@@ -57,7 +99,7 @@ async function exchange(
       networkError = error;
     }
     if (response?.ok) {
-      return (await response.json()) as ExchangeResponseBody;
+      return parseSuccess(await response.text(), io);
     }
     const text = response ? await response.text() : "";
     const failure = response
@@ -100,8 +142,7 @@ export async function runExchange(
     io.setSecret(oidcToken);
 
     const result = await exchange(inputs, oidcToken, io, fetchImpl, sleep, now);
-    // Mask before the token can reach any output or log.
-    io.setSecret(result.token);
+    // parseSuccess has already masked the token, before it can reach any output or log.
     io.setOutput("token", result.token);
     io.setOutput("expires-at", result.expires_at);
     io.setOutput("matched-policy", result.matched_policy);
