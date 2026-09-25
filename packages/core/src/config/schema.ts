@@ -31,6 +31,17 @@ const WEEKDAYS = [
   "Sunday",
 ] as const;
 
+const LOOPBACK_HOSTS = new Set(["localhost", "127.0.0.1", "[::1]"]);
+
+/** App JWTs and installation tokens are sent to this URL, so it must not be plaintext. */
+function isSecureBaseUrl(value: string): boolean {
+  const url = new URL(value);
+  if (url.username || url.password) {
+    return false;
+  }
+  return url.protocol === "https:" || LOOPBACK_HOSTS.has(url.hostname);
+}
+
 const hour = (message: string) => z.int(message).min(0, message).max(23, message);
 
 /** A claim pattern: a plain RE2 string, or `{ pattern, description }` as in upstream's README. */
@@ -81,6 +92,10 @@ const policySchema = z
     require_explicit_policy: z.boolean().default(false),
     github_api_base_url: z
       .url({ protocol: /^https?$/, error: "github_api_base_url must be an http(s) URL" })
+      .refine(isSecureBaseUrl, {
+        error:
+          "github_api_base_url must use https (plain http is allowed only for localhost, 127.0.0.1, or [::1]) and must not contain credentials",
+      })
       .default("https://api.github.com"),
     /** Accepted for upstream compatibility; unused, as upstream never reads it either. */
     github_raw_base_url: z.string().optional(),

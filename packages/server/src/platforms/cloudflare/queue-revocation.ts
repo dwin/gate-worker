@@ -1,11 +1,13 @@
-import { Revoker, type Logger, type RevocationJob, type RevocationStrategy } from "@gate/core";
+import {
+  revocationRetryDelaySeconds,
+  Revoker,
+  type Logger,
+  type RevocationJob,
+  type RevocationStrategy,
+} from "@gate/core";
 
 /** Cloudflare Queues caps message delivery delay at 24 hours. */
 const MAX_DELAY_SECONDS = 86_400;
-/** GitHub installation tokens expire at most one hour after they are minted. */
-const GITHUB_TOKEN_LIFETIME_SECONDS = 3600;
-const INITIAL_RETRY_DELAY_SECONDS = 30;
-const MAX_RETRY_DELAY_SECONDS = 300;
 
 /**
  * Revocation through a Cloudflare Queue: one delayed message per issued token.
@@ -61,9 +63,8 @@ export async function handleRevocationBatch(
         message.ack();
         return;
       } catch (error) {
-        const nowSeconds = Math.floor(now() / 1000);
-        const deadline = job.expires_at + GITHUB_TOKEN_LIFETIME_SECONDS;
-        if (nowSeconds >= deadline) {
+        const delaySeconds = revocationRetryDelaySeconds(job, message.attempts, now());
+        if (delaySeconds === undefined) {
           logger.warn("giving up on revocation; the token has expired at GitHub", {
             queue: batch.queue,
             token_hash: job.token_hash,
@@ -73,11 +74,6 @@ export async function handleRevocationBatch(
           message.ack();
           return;
         }
-        const delaySeconds = Math.min(
-          INITIAL_RETRY_DELAY_SECONDS * 2 ** Math.max(0, message.attempts - 1),
-          MAX_RETRY_DELAY_SECONDS,
-          Math.max(1, deadline - nowSeconds),
-        );
         logger.error("token revocation failed; will retry", {
           queue: batch.queue,
           token_hash: job.token_hash,

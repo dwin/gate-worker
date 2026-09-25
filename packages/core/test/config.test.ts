@@ -152,6 +152,24 @@ describe("compileCentralConfig", () => {
     expect(issuesOf(MINIMAL.replace(find, replace)).join("\n")).toContain(expected);
   });
 
+  it("requires https for the GitHub API URL, except on loopback", () => {
+    const withUrl = (url: string) =>
+      MINIMAL.replace("  trust_policy_path", `  github_api_base_url: ${url}\n  trust_policy_path`);
+    expect(issuesOf(withUrl("http://ghes.example.com/api/v3")).join("\n")).toContain(
+      "github_api_base_url must use https",
+    );
+    expect(issuesOf(withUrl("https://user:pw@ghes.example.com")).join("\n")).toContain(
+      "github_api_base_url must use https",
+    );
+    expect(
+      compileCentralConfig(withUrl("http://127.0.0.1:8080")).config.policy.github_api_base_url,
+    ).toBe("http://127.0.0.1:8080");
+    expect(
+      compileCentralConfig(withUrl("https://ghes.example.com/api/v3")).config.policy
+        .github_api_base_url,
+    ).toBe("https://ghes.example.com/api/v3");
+  });
+
   it("reports YAML syntax errors", () => {
     expect(issuesOf("policy: [unclosed")[0]).toMatch(/^YAML syntax:/);
   });

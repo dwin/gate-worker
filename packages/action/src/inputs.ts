@@ -56,14 +56,16 @@ export function parsePermissions(raw: string): Record<string, string> | undefine
   return permissions;
 }
 
-function positiveInteger(name: string, raw: string): number | undefined {
-  if (!raw.trim()) {
+function positiveInteger(name: string, raw: string, maximum: number): number | undefined {
+  const text = raw.trim();
+  if (!text) {
     return undefined;
   }
-  if (!/^\d+$/.test(raw.trim()) || Number(raw) <= 0) {
-    throw new InputError(`${name}: expected a positive integer, got "${raw}"`);
+  const value = /^\d+$/.test(text) ? Number(text) : Number.NaN;
+  if (!Number.isSafeInteger(value) || value <= 0 || value > maximum) {
+    throw new InputError(`${name}: expected an integer from 1 to ${String(maximum)}, got "${raw}"`);
   }
-  return Number(raw);
+  return value;
 }
 
 const LOOPBACK_HOSTS = new Set(["localhost", "127.0.0.1", "[::1]"]);
@@ -115,11 +117,12 @@ export function readInputs(io: ActionIO): ActionInputs {
     repository,
     policyName: io.getInput("policy-name").trim() || undefined,
     permissions: parsePermissions(io.getInput("permissions")),
-    ttl: positiveInteger("ttl", io.getInput("ttl")),
+    // GitHub installation tokens never outlive one hour.
+    ttl: positiveInteger("ttl", io.getInput("ttl"), 3600),
     audience: io.getInput("audience").trim() || "gate",
     apiUrl: secureUrl("api-url", io.getInput("api-url").trim() || "https://api.github.com"),
     originHeader: originName ? { name: originName, value: originValue } : undefined,
     revokeOnCompletion: revoke !== "false",
-    timeoutMs: (positiveInteger("timeout", io.getInput("timeout")) ?? 60) * 1000,
+    timeoutMs: (positiveInteger("timeout", io.getInput("timeout"), 3600) ?? 60) * 1000,
   };
 }

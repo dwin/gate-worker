@@ -187,7 +187,9 @@ describe("runExchange", () => {
     [{ endpoint: "https://user:pass@gate.example.com" }, "endpoint: must not contain credentials"],
     [{ endpoint: "ftp://gate.example.com" }, "endpoint: expected an http(s) URL"],
     [{ repository: "not-a-repo" }, "expected owner/repo"],
-    [{ ttl: "-5" }, "positive integer"],
+    [{ ttl: "-5" }, "expected an integer from 1 to 3600"],
+    [{ ttl: "7200" }, "expected an integer from 1 to 3600"],
+    [{ timeout: "9".repeat(400) }, "timeout: expected an integer from 1 to 3600"],
     [{ permissions: "contents: admin" }, "must be none, read, or write"],
     [{ "origin-header-name": "X" }, "must be set together"],
   ])("rejects invalid input %o", async (override, message) => {

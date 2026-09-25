@@ -77,6 +77,7 @@ export { LogAuditSink } from "./audit/log-sink.ts";
 
 // Revocation
 export { revocationJobSchema, type RevocationJob } from "./revocation/job.ts";
+export { revocationRetryDelaySeconds } from "./revocation/retry.ts";
 export { Revoker } from "./revocation/revoker.ts";
 export { TokenSealer } from "./revocation/sealer.ts";
 
