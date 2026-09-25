@@ -66,16 +66,33 @@ function positiveInteger(name: string, raw: string): number | undefined {
   return Number(raw);
 }
 
-/** Requires https, allowing plain http only for loopback, because tokens are sent to these URLs. */
+const LOOPBACK_HOSTS = new Set(["localhost", "127.0.0.1", "[::1]"]);
+
+/**
+ * Requires https, allowing plain http only for a loopback host, because tokens
+ * are sent to these URLs. The URL is parsed rather than prefix-matched, so
+ * userinfo tricks like `http://localhost:80@evil.example` cannot pass.
+ */
 function secureUrl(name: string, raw: string): string {
-  const url = raw.trim().replace(/\/+$/, "");
-  if (!/^https?:\/\//.test(url)) {
+  let url: URL;
+  try {
+    url = new URL(raw.trim());
+  } catch {
     throw new InputError(`${name}: expected an http(s) URL`);
   }
-  if (url.startsWith("http://") && !/^http:\/\/(localhost|127\.0\.0\.1)(:|\/|$)/.test(url)) {
+  if (url.protocol !== "https:" && url.protocol !== "http:") {
+    throw new InputError(`${name}: expected an http(s) URL`);
+  }
+  if (url.username || url.password) {
+    throw new InputError(`${name}: must not contain credentials`);
+  }
+  if (url.protocol === "http:" && !LOOPBACK_HOSTS.has(url.hostname)) {
     throw new InputError(`${name}: must use https (tokens would cross the network in plaintext)`);
   }
-  return url;
+  if (url.search || url.hash) {
+    throw new InputError(`${name}: must not contain a query or fragment`);
+  }
+  return url.href.replace(/\/+$/, "");
 }
 
 export function readInputs(io: ActionIO): ActionInputs {

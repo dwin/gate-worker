@@ -20370,15 +20370,27 @@ function positiveInteger(name, raw) {
   }
   return Number(raw);
 }
+var LOOPBACK_HOSTS = /* @__PURE__ */ new Set(["localhost", "127.0.0.1", "[::1]"]);
 function secureUrl(name, raw) {
-  const url = raw.trim().replace(/\/+$/, "");
-  if (!/^https?:\/\//.test(url)) {
+  let url;
+  try {
+    url = new URL(raw.trim());
+  } catch {
     throw new InputError(`${name}: expected an http(s) URL`);
   }
-  if (url.startsWith("http://") && !/^http:\/\/(localhost|127\.0\.0\.1)(:|\/|$)/.test(url)) {
+  if (url.protocol !== "https:" && url.protocol !== "http:") {
+    throw new InputError(`${name}: expected an http(s) URL`);
+  }
+  if (url.username || url.password) {
+    throw new InputError(`${name}: must not contain credentials`);
+  }
+  if (url.protocol === "http:" && !LOOPBACK_HOSTS.has(url.hostname)) {
     throw new InputError(`${name}: must use https (tokens would cross the network in plaintext)`);
   }
-  return url;
+  if (url.search || url.hash) {
+    throw new InputError(`${name}: must not contain a query or fragment`);
+  }
+  return url.href.replace(/\/+$/, "");
 }
 function readInputs(io) {
   const endpoint = secureUrl("endpoint", io.getInput("endpoint"));

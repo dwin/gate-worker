@@ -172,5 +172,52 @@ describe("revocation queue consumer", () => {
     expect(harness.github.revokedTokens).toEqual([token]);
     expect(result.explicitAcks.sort()).toEqual(["good", "malformed"]);
     expect(result.retryMessages.map((message) => message.msgId)).toEqual(["tampered"]);
+    const retryLog = harness.logs
+      .map((line) => JSON.parse(line) as Record<string, unknown>)
+      .find((line) => line["msg"] === "token revocation failed; will retry");
+    expect(retryLog).toMatchObject({ retry_in_seconds: 30, queue: "gate-revoke" });
+  });
+
+  it("keeps retrying while the token could be valid, then drops the job once it must have expired", async () => {
+    const harness = await workerHarness();
+    const ctx = createExecutionContext();
+    await harness.app.fetch(
+      new Request("https://gate.test/api/v1/exchange", {
+        method: "POST",
+        body: JSON.stringify({ oidc_token: await harness.oidc.token(), target_repository: REPO }),
+      }),
+      env,
+      ctx,
+    );
+    await waitOnExecutionContext(ctx);
+    const job = harness.sent[0]?.job;
+    if (!job) throw new Error("no revocation job was sent");
+    const runtime = await harness.runtime();
+    harness.github.setError("/installation/token", 500, "GitHub is down");
+
+    const late = createMessageBatch("gate-revoke-dlq", [
+      { id: "within-window", timestamp: new Date(), attempts: 9, body: job },
+    ]);
+    await handleRevocationBatch(
+      late,
+      runtime.gate.revoker,
+      runtime.logger,
+      () => job.expires_at * 1000 + 60_000,
+    );
+    const retried = await getQueueResult(late, createExecutionContext());
+    expect(retried.retryMessages.map((message) => message.msgId)).toEqual(["within-window"]);
+    expect(harness.logs.some((line) => line.includes('"retry_in_seconds":300'))).toBe(true);
+
+    const expired = createMessageBatch("gate-revoke-dlq", [
+      { id: "past-window", timestamp: new Date(), attempts: 99, body: job },
+    ]);
+    await handleRevocationBatch(
+      expired,
+      runtime.gate.revoker,
+      runtime.logger,
+      () => (job.expires_at + 3600) * 1000,
+    );
+    const dropped = await getQueueResult(expired, createExecutionContext());
+    expect(dropped.explicitAcks).toEqual(["past-window"]);
   });
 });

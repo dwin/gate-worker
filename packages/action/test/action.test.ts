@@ -182,6 +182,10 @@ describe("runExchange", () => {
     [{ endpoint: "http://gate.example.com" }, "must use https"],
     [{ "api-url": "http://github.example.com/api/v3" }, "api-url: must use https"],
     [{ "api-url": "github.example.com" }, "api-url: expected an http(s) URL"],
+    [{ "api-url": "http://localhost:80@evil.example" }, "api-url: must not contain credentials"],
+    [{ endpoint: "http://localhost.evil.example" }, "endpoint: must use https"],
+    [{ endpoint: "https://user:pass@gate.example.com" }, "endpoint: must not contain credentials"],
+    [{ endpoint: "ftp://gate.example.com" }, "endpoint: expected an http(s) URL"],
     [{ repository: "not-a-repo" }, "expected owner/repo"],
     [{ ttl: "-5" }, "positive integer"],
     [{ permissions: "contents: admin" }, "must be none, read, or write"],
@@ -196,6 +200,27 @@ describe("runExchange", () => {
     const fake = fakeIO({ ...BASE_INPUTS, "revoke-on-completion": "false" });
     await runExchange(fake.io, scriptedFetch([() => Response.json(SUCCESS)]).fetch, noSleep);
     expect(fake.saved).toEqual({});
+  });
+});
+
+describe("URL inputs", () => {
+  it("allow plain http only for loopback hosts and normalize trailing slashes", async () => {
+    const fake = fakeIO({
+      ...BASE_INPUTS,
+      endpoint: "http://127.0.0.1:8787/",
+      "api-url": "http://[::1]:3000",
+    });
+    const http = scriptedFetch([() => Response.json(SUCCESS)]);
+    await runExchange(fake.io, http.fetch, noSleep);
+    expect(fake.failed()).toBeUndefined();
+    expect(http.requests[0]?.url).toBe("http://127.0.0.1:8787/api/v1/exchange");
+    expect(fake.saved[STATE_API_URL]).toBe("http://[::1]:3000");
+  });
+
+  it("keep path prefixes such as a GHES api/v3 base", async () => {
+    const fake = fakeIO({ ...BASE_INPUTS, "api-url": "https://github.example.com/api/v3/" });
+    await runExchange(fake.io, scriptedFetch([() => Response.json(SUCCESS)]).fetch, noSleep);
+    expect(fake.saved[STATE_API_URL]).toBe("https://github.example.com/api/v3");
   });
 });
 

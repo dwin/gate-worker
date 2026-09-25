@@ -13,8 +13,10 @@
     "GATE_LOGGER_LEVEL": "info",
   },
   // Both queues are provisioned automatically by `wrangler deploy` and the
-  // Deploy to Cloudflare button. The dead-letter queue is also consumed, which
-  // gives failed revocations five more attempts and logs them as errors.
+  // Deploy to Cloudflare button. Failed revocations retry with backoff; after
+  // five attempts they move to the dead-letter queue, whose 100 retries (up to
+  // 5 minutes apart) outlast GitHub's one-hour token lifetime. The consumer
+  // only drops a job once its token must have expired.
   "queues": {
     "producers": [
       { "queue": "gate-revoke", "binding": "REVOKE" },
@@ -30,7 +32,7 @@
       {
         "queue": "gate-revoke-dlq",
         "max_batch_size": 10,
-        "max_retries": 5,
+        "max_retries": 100,
       },
     ],
   },
