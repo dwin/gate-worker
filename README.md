@@ -4,13 +4,16 @@
 
 GATE (GitHub Authenticated Token Exchange) on Cloudflare Workers. Workflows
 exchange their OIDC token for a short-lived GitHub App token scoped to one
-repository, instead of storing long-lived personal access tokens. Each target
+repository, or to several repositories with the same owner, instead of storing
+long-lived personal access tokens. Each target
 repository decides who may get a token, and with what permissions, in a trust
 policy file.
 
 This is a TypeScript port of [thomsonreuters/gate](https://github.com/thomsonreuters/gate).
 The HTTP API, error codes, configuration schema, and trust-policy format match
-upstream. It runs on Cloudflare Workers first, and the same core also runs on
+upstream. The only additions are optional
+[multi-repository requests](#one-token-for-several-repositories) and the setting
+that caps them. It runs on Cloudflare Workers first, and the same core also runs on
 Node, Bun, AWS Lambda, and Vercel. A GitHub Action in this repository calls it
 with one `uses:` line.
 
@@ -73,6 +76,49 @@ the job ends, so it cannot outlive the job. Denials fail the step with the
 server's error code and request ID. See [action.yml](action.yml) for every input
 and output.
 
+### One token for several repositories
+
+Tools that take a single credential, such as git with private submodules or Go
+with private modules, can get one token covering several repositories:
+
+```yaml
+- uses: dwin/gate-worker@main
+  id: gate
+  with:
+    endpoint: https://gate.<your-subdomain>.workers.dev
+    repository: |
+      my-org/service
+      my-org/shared-lib
+    permissions: |
+      contents: read
+```
+
+The rules:
+
+- **One owner.** A token belongs to one App installation, so every repository
+  must have the same owner.
+- **Every repository must allow it.** GATE evaluates each repository's trust
+  policy separately. If any of them denies the request, no token is issued, and
+  the error names that repository. The token never grants more than separate
+  tokens would.
+- **Permissions are required.** GitHub applies one permission set to every
+  repository in a token, so you list the permissions the token needs. GATE does
+  not merge the policies' defaults for you.
+- **Shortest TTL wins.** The token lives as long as the shortest TTL any of the
+  matched policies allows.
+- **Bounded.** A request may list at most `policy.max_target_repositories`
+  repositories (default 10, GitHub's maximum is 500). Each one costs a
+  trust-policy fetch, which counts against the Workers subrequest limit.
+
+The `matched-policies` output maps each repository to its matched policy.
+Every repository gets its own audit line, and all of them carry the same token
+hash.
+
+On the HTTP API, send `target_repositories` (an array) instead of
+`target_repository`. Sending both is an error. The response then also includes
+`repositories` and `matched_policies`. Upstream GATE has no such fields. A
+request that uses only `target_repository` behaves exactly as it does upstream.
+
 ## Trust policies
 
 Each target repository authorizes callers in `.github/gate/trust-policy.yaml`,
@@ -126,6 +172,9 @@ Differences from upstream's configuration:
   `private_key_path`, and `origin.header_value_secret` instead of `header_value`.
 - Unknown keys are errors.
 - Only the log audit backend and the memory selector exist in this build.
+- `policy.max_target_repositories` (default 10) is new. It caps
+  [multi-repository requests](#one-token-for-several-repositories), which
+  upstream does not have.
 - Scalar settings can be overridden with upstream's `GATE_*` variables, such as
   `GATE_LOGGER_LEVEL` or `GATE_POLICY_DEFAULT_TOKEN_TTL`.
 

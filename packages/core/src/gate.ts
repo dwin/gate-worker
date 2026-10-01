@@ -145,6 +145,7 @@ export async function createGate(options: GateOptions): Promise<Gate> {
 
   const service = new TokenExchangeService({
     maxTtl: config.policy.max_token_ttl,
+    maxTargetRepositories: config.policy.max_target_repositories,
     oidc: new OidcValidator({
       audience: config.oidc.audience,
       issuers: config.policy.providers.map((provider) => provider.issuer),

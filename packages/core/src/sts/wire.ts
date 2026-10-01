@@ -1,6 +1,9 @@
 /**
- * HTTP wire format of `POST /api/v1/exchange`, identical to upstream. Shared
- * with the GitHub Action so client and server cannot drift.
+ * HTTP wire format of `POST /api/v1/exchange`. Shared with the GitHub Action
+ * so client and server cannot drift. Identical to upstream except for the
+ * optional multi-repository fields (`target_repositories` in the request,
+ * `repositories` and `matched_policies` in the response), which upstream
+ * clients never send and never receive.
  */
 import { z } from "zod";
 import type { DenialCode } from "../authorizer/denial.ts";
@@ -20,6 +23,10 @@ export const exchangeRequestBodySchema = z.object({
     .string()
     .nullish()
     .transform((value) => value ?? ""),
+  target_repositories: z
+    .array(z.string())
+    .nullish()
+    .transform((value) => value ?? undefined),
   policy_name: z
     .string()
     .nullish()
@@ -36,7 +43,9 @@ export const exchangeRequestBodySchema = z.object({
 
 export interface ExchangeRequestBody {
   readonly oidc_token: string;
-  readonly target_repository: string;
+  readonly target_repository?: string;
+  /** Several repositories of one owner, for one token. Excludes `target_repository`. */
+  readonly target_repositories?: readonly string[];
   readonly policy_name?: string;
   readonly requested_permissions?: Readonly<Record<string, string>>;
   readonly requested_ttl?: number;
@@ -46,9 +55,17 @@ export interface ExchangeResponseBody {
   readonly token: string;
   /** RFC 3339 timestamp, capped to the effective TTL. */
   readonly expires_at: string;
+  /**
+   * The matched trust policy. For a `target_repositories` request, the
+   * distinct policy names in request order, joined with ", ".
+   */
   readonly matched_policy: string;
   readonly permissions: Readonly<Record<string, string>>;
   readonly request_id: string;
+  /** Only for `target_repositories` requests: the repositories the token covers. */
+  readonly repositories?: readonly string[];
+  /** Only for `target_repositories` requests: the matched policy per repository. */
+  readonly matched_policies?: Readonly<Record<string, string>>;
 }
 
 export const ServiceErrorCode = {

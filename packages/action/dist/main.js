@@ -2,7 +2,7 @@ import { createRequire } from 'node:module'; const require = createRequire(impor
 import {
   coreIO,
   runExchange
-} from "./chunks/chunk-JDXCUO7M.js";
+} from "./chunks/chunk-3QIL6B6N.js";
 
 // src/io.ts
 var sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));

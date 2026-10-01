@@ -40,7 +40,11 @@ export {
   type PermissionLevel,
   type Permissions,
 } from "./authorizer/permission-levels.ts";
-export { NON_REPOSITORY_PERMISSIONS, resolvePermissions } from "./authorizer/permissions.ts";
+export {
+  intersectPermissions,
+  NON_REPOSITORY_PERMISSIONS,
+  resolvePermissions,
+} from "./authorizer/permissions.ts";
 export {
   extensionVariants,
   PolicyFileNotFoundError,
