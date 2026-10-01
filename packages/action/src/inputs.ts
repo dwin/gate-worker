@@ -77,10 +77,11 @@ function parseRepositories(raw: string): string[] {
     }
     seen.add(key);
   }
-  const owners = new Set(repositories.map((repository) => repository.split("/")[0]?.toLowerCase()));
+  // Spelled identically, as the server matches owners to configured Apps exactly.
+  const owners = new Set(repositories.map((repository) => repository.split("/")[0]));
   if (owners.size > 1) {
     throw new InputError(
-      "repository: every listed repository must have the same owner, because one token covers one App installation",
+      "repository: every listed repository must have the same owner, spelled identically, because one token covers one App installation",
     );
   }
   return repositories;

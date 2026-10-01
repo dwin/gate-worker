@@ -137,7 +137,7 @@ export class GitHubAppClient {
     }
     const split = list.map(splitRepository);
     const owner = split[0]?.[0] ?? "";
-    if (split.some(([candidate]) => candidate.toLowerCase() !== owner.toLowerCase())) {
+    if (split.some(([candidate]) => candidate !== owner)) {
       throw new Error(`repositories must share one owner: ${list.join(", ")}`);
     }
     const installationId = await this.#installationId(owner);

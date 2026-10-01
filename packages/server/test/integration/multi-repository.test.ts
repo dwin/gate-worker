@@ -153,6 +153,7 @@ describe("multi-repository tokens", () => {
     ["empty list", { target_repositories: [] }],
     ["both fields", { target_repository: REPO_A, target_repositories: [REPO_A, REPO_B] }],
     ["different owners", { target_repositories: [REPO_A, "other-org/repo-b"] }],
+    ["owners spelled differently", { target_repositories: [REPO_A, "Example-Org/repo-b"] }],
     ["duplicate, ignoring case", { target_repositories: [REPO_A, "Example-Org/Repo-A"] }],
     ["malformed entry", { target_repositories: [REPO_A, "repo-b"] }],
     ["no requested permissions", { requested_permissions: undefined }],

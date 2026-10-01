@@ -96,7 +96,7 @@ with private modules, can get one token covering several repositories:
 The rules:
 
 - **One owner.** A token belongs to one App installation, so every repository
-  must have the same owner.
+  must have the same owner, spelled the same way in each entry.
 - **Every repository must allow it.** GATE evaluates each repository's trust
   policy separately. If any of them denies the request, no token is issued, and
   the error names that repository. The token never grants more than separate

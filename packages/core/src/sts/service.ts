@@ -18,10 +18,12 @@ const GITHUB_NAME = /^[A-Za-z0-9._-]+$/;
 
 export interface ExchangeRequest {
   readonly oidcToken: string;
-  readonly targetRepository: string;
+  /** The one target repository. Set exactly one of this and `targetRepositories`. */
+  readonly targetRepository?: string | undefined;
   /**
    * Several repositories of one owner for one token. Mutually exclusive with
-   * `targetRepository`, and requires `requestedPermissions`.
+   * `targetRepository`, and requires `requestedPermissions`. Validation
+   * enforces both rules, since HTTP callers can send any combination.
    */
   readonly targetRepositories?: readonly string[] | undefined;
   readonly policyName?: string | undefined;
@@ -67,7 +69,7 @@ type Allowed = Extract<AuthorizationResult, { allowed: true }>;
 
 /** The repositories a request targets, in request order. */
 function targetsOf(request: ExchangeRequest): readonly string[] {
-  return request.targetRepositories ?? [request.targetRepository];
+  return request.targetRepositories ?? [request.targetRepository ?? ""];
 }
 
 /** Log attributes naming the target: `repository` as upstream, or `repositories`. */
@@ -395,7 +397,7 @@ export class TokenExchangeService {
     }
     const targetProblem =
       request.targetRepositories === undefined
-        ? repositoryProblem("target_repository", request.targetRepository)
+        ? repositoryProblem("target_repository", request.targetRepository ?? "")
         : this.#targetListProblem(request.targetRepositories, request);
     if (targetProblem) {
       return targetProblem;
@@ -434,9 +436,10 @@ export class TokenExchangeService {
       }
       seen.add(key);
     }
-    const owners = new Set(targets.map((repository) => repository.split("/", 1)[0]?.toLowerCase()));
+    // Owners compare exactly, as AppSelector matches configured organizations.
+    const owners = new Set(targets.map((repository) => repository.split("/", 1)[0]));
     if (owners.size > 1) {
-      return "target_repositories must all belong to one owner, because a token covers one App installation";
+      return "target_repositories must all belong to one owner, spelled identically, because a token covers one App installation";
     }
     // Defaulting to each policy's full grant would silently intersect differing
     // grants, so the caller must say what the token needs.

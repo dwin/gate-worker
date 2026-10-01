@@ -283,6 +283,11 @@ describe("multiple repositories", () => {
       /same owner/,
     ],
     [
+      "owners spelled differently",
+      { repository: "example-org/a\nExample-Org/b", permissions: "contents: read" },
+      /same owner/,
+    ],
+    [
       "a duplicate",
       { repository: "example-org/a\nExample-Org/A", permissions: "contents: read" },
       /more than once/,
@@ -309,6 +314,24 @@ describe("multiple repositories", () => {
     expect(fake.failed()).toMatch(/malformed \(repositories\)/);
     expect(fake.secrets).toContain("ghs_secret");
     expect(fake.outputs).not.toHaveProperty("token");
+  });
+
+  it("fails when matched_policies names a repository that was not requested", async () => {
+    const fake = fakeIO({
+      ...BASE_INPUTS,
+      repository: "example-org/a\nexample-org/b",
+      permissions: "contents: read",
+    });
+    const http = scriptedFetch([
+      () =>
+        Response.json({
+          ...MULTI_SUCCESS,
+          matched_policies: { ...MULTI_SUCCESS.matched_policies, "example-org/c": "ci-read" },
+        }),
+    ]);
+    await runExchange(fake.io, http.fetch, noSleep);
+    expect(fake.failed()).toMatch(/malformed \(repositories\)/);
+    expect(fake.outputs).not.toHaveProperty("matched-policies");
   });
 });
 

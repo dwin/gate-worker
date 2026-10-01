@@ -20377,10 +20377,10 @@ function parseRepositories(raw) {
     }
     seen.add(key);
   }
-  const owners = new Set(repositories.map((repository) => repository.split("/")[0]?.toLowerCase()));
+  const owners = new Set(repositories.map((repository) => repository.split("/")[0]));
   if (owners.size > 1) {
     throw new InputError(
-      "repository: every listed repository must have the same owner, because one token covers one App installation"
+      "repository: every listed repository must have the same owner, spelled identically, because one token covers one App installation"
     );
   }
   return repositories;
@@ -20471,7 +20471,7 @@ function isStringRecord(value) {
 }
 function coversRepositories(candidate, repositories) {
   const { repositories: covered, matched_policies: policies } = candidate;
-  return Array.isArray(covered) && covered.length === repositories.length && repositories.every((repository) => covered.includes(repository)) && isStringRecord(policies) && repositories.every((repository) => isNonEmptyString(policies[repository]));
+  return Array.isArray(covered) && covered.length === repositories.length && repositories.every((repository) => covered.includes(repository)) && isStringRecord(policies) && Object.keys(policies).length === repositories.length && repositories.every((repository) => isNonEmptyString(policies[repository]));
 }
 function parseSuccess(text, io, repositories) {
   let body;

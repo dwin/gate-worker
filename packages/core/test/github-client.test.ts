@@ -103,6 +103,9 @@ describe("GitHubAppClient.requestToken", () => {
     await expect(
       client.requestToken([REPO, "other-org/repo"], { contents: "read" }),
     ).rejects.toThrow(/share one owner/);
+    await expect(
+      client.requestToken([REPO, "Example-Org/repo"], { contents: "read" }),
+    ).rejects.toThrow(/share one owner/);
     await expect(client.requestToken([], { contents: "read" })).rejects.toThrow(
       /without explicit repositories/,
     );

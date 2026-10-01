@@ -3,7 +3,7 @@ import {
   STATE_API_URL,
   STATE_TOKEN,
   coreIO
-} from "./chunks/chunk-3QIL6B6N.js";
+} from "./chunks/chunk-PL6D7LCU.js";
 
 // src/revoke.ts
 async function runRevoke(io, fetchImpl) {

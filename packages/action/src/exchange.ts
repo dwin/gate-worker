@@ -43,6 +43,7 @@ function coversRepositories(
     covered.length === repositories.length &&
     repositories.every((repository) => covered.includes(repository)) &&
     isStringRecord(policies) &&
+    Object.keys(policies).length === repositories.length &&
     repositories.every((repository) => isNonEmptyString(policies[repository]))
   );
 }
