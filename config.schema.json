@@ -67,6 +67,12 @@
           "default": false,
           "type": "boolean"
         },
+        "max_target_repositories": {
+          "default": 10,
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 500
+        },
         "github_api_base_url": {
           "default": "https://api.github.com",
           "type": "string"

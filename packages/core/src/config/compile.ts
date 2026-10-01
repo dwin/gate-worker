@@ -59,6 +59,7 @@ const ENV_OVERRIDES: readonly (readonly [string, readonly [string, string], Over
   ["GATE_POLICY_DEFAULT_TOKEN_TTL", ["policy", "default_token_ttl"], "integer"],
   ["GATE_POLICY_MAX_TOKEN_TTL", ["policy", "max_token_ttl"], "integer"],
   ["GATE_POLICY_REQUIRE_EXPLICIT_POLICY", ["policy", "require_explicit_policy"], "boolean"],
+  ["GATE_POLICY_MAX_TARGET_REPOSITORIES", ["policy", "max_target_repositories"], "integer"],
   ["GATE_POLICY_GITHUB_API_BASE_URL", ["policy", "github_api_base_url"], "string"],
   ["GATE_ORIGIN_ENABLED", ["origin", "enabled"], "boolean"],
   ["GATE_ORIGIN_HEADER_NAME", ["origin", "header_name"], "string"],

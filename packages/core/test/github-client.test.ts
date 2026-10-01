@@ -90,6 +90,28 @@ describe("GitHubAppClient.requestToken", () => {
     );
   });
 
+  it("mints one token for several repositories of one owner", async () => {
+    await client.requestToken([REPO, "example-org/other-repo"], { contents: "read" });
+    const mint = github.requests.find((request) => request.path.endsWith("/access_tokens"));
+    expect(mint?.body).toEqual({
+      permissions: { contents: "read" },
+      repositories: ["example-repo", "other-repo"],
+    });
+  });
+
+  it("refuses repositories of different owners, or none, before calling GitHub", async () => {
+    await expect(
+      client.requestToken([REPO, "other-org/repo"], { contents: "read" }),
+    ).rejects.toThrow(/share one owner/);
+    await expect(
+      client.requestToken([REPO, "Example-Org/repo"], { contents: "read" }),
+    ).rejects.toThrow(/share one owner/);
+    await expect(client.requestToken([], { contents: "read" })).rejects.toThrow(
+      /without explicit repositories/,
+    );
+    expect(github.requests).toHaveLength(0);
+  });
+
   it("reports a missing installation", async () => {
     await expect(client.requestToken("nobody/repo", { contents: "read" })).rejects.toBeInstanceOf(
       InstallationNotFoundError,
