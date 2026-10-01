@@ -152,6 +152,7 @@ describe("multi-repository tokens", () => {
   it.each<[string, Record<string, unknown>]>([
     ["empty list", { target_repositories: [] }],
     ["both fields", { target_repository: REPO_A, target_repositories: [REPO_A, REPO_B] }],
+    ["both fields, one empty", { target_repository: "", target_repositories: [REPO_A, REPO_B] }],
     ["different owners", { target_repositories: [REPO_A, "other-org/repo-b"] }],
     ["owners spelled differently", { target_repositories: [REPO_A, "Example-Org/repo-b"] }],
     ["duplicate, ignoring case", { target_repositories: [REPO_A, "Example-Org/Repo-A"] }],

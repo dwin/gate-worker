@@ -413,7 +413,7 @@ export class TokenExchangeService {
   }
 
   #targetListProblem(targets: readonly string[], request: ExchangeRequest): string | undefined {
-    if (request.targetRepository) {
+    if (request.targetRepository !== undefined) {
       return "target_repository and target_repositories are mutually exclusive";
     }
     if (targets.length === 0) {

@@ -19,10 +19,12 @@ export const exchangeRequestBodySchema = z.object({
     .string()
     .nullish()
     .transform((value) => value ?? ""),
+  // Kept undefined when absent, so an explicit "" alongside
+  // target_repositories still counts as sending both.
   target_repository: z
     .string()
     .nullish()
-    .transform((value) => value ?? ""),
+    .transform((value) => value ?? undefined),
   target_repositories: z
     .array(z.string())
     .nullish()
