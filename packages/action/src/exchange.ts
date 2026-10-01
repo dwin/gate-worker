@@ -184,10 +184,14 @@ export async function runExchange(
     io.setOutput("token", result.token);
     io.setOutput("expires-at", result.expires_at);
     io.setOutput("matched-policy", result.matched_policy);
+    // Only a multi-repository response's map was validated against the request,
+    // so a single repository's map is always built from matched_policy.
     io.setOutput(
       "matched-policies",
       JSON.stringify(
-        result.matched_policies ?? { [inputs.repositories[0] ?? ""]: result.matched_policy },
+        inputs.repositories.length === 1
+          ? { [inputs.repositories[0] ?? ""]: result.matched_policy }
+          : (result.matched_policies ?? {}),
       ),
     );
     io.setOutput("permissions", JSON.stringify(result.permissions));

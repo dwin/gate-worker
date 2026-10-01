@@ -180,7 +180,10 @@ Differences from upstream's configuration:
 
 For several GitHub Apps or organizations, list them all under `github_apps`,
 each with its own `private_key_secret`, and do not set the two quick-setup
-secrets.
+secrets. Apps that share an organization must be installed on the same
+repositories. GATE may read a trust policy through one App and mint the token
+through another. If the second App lacks a repository, the exchange fails with
+`GITHUB_API_ERROR`.
 
 ## Deploy manually
 

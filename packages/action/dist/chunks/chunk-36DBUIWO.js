@@ -20569,7 +20569,7 @@ async function runExchange(io, fetchImpl, sleep, now = Date.now) {
     io.setOutput(
       "matched-policies",
       JSON.stringify(
-        result.matched_policies ?? { [inputs.repositories[0] ?? ""]: result.matched_policy }
+        inputs.repositories.length === 1 ? { [inputs.repositories[0] ?? ""]: result.matched_policy } : result.matched_policies ?? {}
       )
     );
     io.setOutput("permissions", JSON.stringify(result.permissions));

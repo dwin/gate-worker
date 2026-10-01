@@ -275,6 +275,15 @@ describe("multiple repositories", () => {
     expect(fake.outputs["matched-policies"]).toBe('{"example-org/example-repo":"ci-read"}');
   });
 
+  it("ignores an unvalidated matched_policies map in a single-repository response", async () => {
+    const fake = fakeIO(BASE_INPUTS);
+    const http = scriptedFetch([
+      () => Response.json({ ...SUCCESS, matched_policies: { "evil-org/x": "ci-read" } }),
+    ]);
+    await runExchange(fake.io, http.fetch, noSleep);
+    expect(fake.outputs["matched-policies"]).toBe('{"example-org/example-repo":"ci-read"}');
+  });
+
   it.each([
     ["no permissions", { repository: "example-org/a\nexample-org/b" }, /permissions: required/],
     [
