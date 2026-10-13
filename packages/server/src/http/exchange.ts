@@ -66,6 +66,7 @@ export function exchangeHandler(options: AppOptions) {
       {
         oidcToken: body.data.oidc_token,
         targetRepository: body.data.target_repository,
+        targetRepositories: body.data.target_repositories,
         policyName: body.data.policy_name,
         requestedPermissions: body.data.requested_permissions,
         requestedTtl: body.data.requested_ttl,

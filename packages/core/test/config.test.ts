@@ -44,6 +44,7 @@ describe("compileCentralConfig", () => {
       default_token_ttl: 900,
       max_token_ttl: 3600,
       require_explicit_policy: false,
+      max_target_repositories: 10,
       github_api_base_url: "https://api.github.com",
     });
     expect(config.origin).toEqual({
@@ -224,6 +225,18 @@ describe("applyEnvOverrides", () => {
     );
     expect(() => applyEnvOverrides(config, { GATE_ORIGIN_ENABLED: "yes" })).toThrow(
       /expected true or false/,
+    );
+  });
+  it("bounds max_target_repositories between 1 and GitHub's 500", () => {
+    expect(
+      applyEnvOverrides(config, { GATE_POLICY_MAX_TARGET_REPOSITORIES: "25" }).policy
+        .max_target_repositories,
+    ).toBe(25);
+    expect(() => applyEnvOverrides(config, { GATE_POLICY_MAX_TARGET_REPOSITORIES: "0" })).toThrow(
+      /at least 1/,
+    );
+    expect(() => applyEnvOverrides(config, { GATE_POLICY_MAX_TARGET_REPOSITORIES: "501" })).toThrow(
+      /cannot exceed 500/,
     );
   });
 });

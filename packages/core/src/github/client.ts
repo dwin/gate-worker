@@ -117,15 +117,36 @@ export class GitHubAppClient {
     this.#tokens = new MemoryCache(TOKEN_CACHE_MAX_ENTRIES, this.#clock);
   }
 
-  /** Mints an installation token scoped to one repository and permission set. */
-  async requestToken(repository: string, permissions: Permissions): Promise<InstallationToken> {
+  /**
+   * Mints an installation token scoped to the given repositories and
+   * permission set. Every repository must belong to the same owner, because a
+   * token belongs to one installation.
+   */
+  async requestToken(
+    repositories: string | readonly string[],
+    permissions: Permissions,
+  ): Promise<InstallationToken> {
     if (Object.keys(permissions).length === 0) {
       // GitHub treats an omitted permission set as "everything the App holds".
       throw new Error("refusing to mint a repository token without explicit permissions");
     }
-    const [owner, repo] = splitRepository(repository);
+    const list = typeof repositories === "string" ? [repositories] : repositories;
+    if (list.length === 0) {
+      // GitHub treats an omitted repository list as "every repository installed".
+      throw new Error("refusing to mint a repository token without explicit repositories");
+    }
+    const split = list.map(splitRepository);
+    const owner = split[0]?.[0] ?? "";
+    if (split.some(([candidate]) => candidate !== owner)) {
+      throw new Error(`repositories must share one owner: ${list.join(", ")}`);
+    }
     const installationId = await this.#installationId(owner);
-    return this.#createInstallationToken(installationId, repo, permissions, repository);
+    return this.#createInstallationToken(
+      installationId,
+      split.map(([, repo]) => repo),
+      permissions,
+      list.join(", "),
+    );
   }
 
   /** Revokes an installation token. A 401 means it is already invalid and counts as success. */
@@ -259,16 +280,16 @@ export class GitHubAppClient {
 
   async #createInstallationToken(
     installationId: number,
-    repository: string | undefined,
+    repositories: readonly string[] | undefined,
     permissions: Permissions,
     subject: string,
   ): Promise<InstallationToken> {
-    const body: { permissions?: Permissions; repositories?: string[] } = {};
+    const body: { permissions?: Permissions; repositories?: readonly string[] } = {};
     if (Object.keys(permissions).length > 0) {
       body.permissions = permissions;
     }
-    if (repository !== undefined) {
-      body.repositories = [repository];
+    if (repositories !== undefined) {
+      body.repositories = repositories;
     }
     const response = await this.#call(
       "POST",
@@ -278,7 +299,7 @@ export class GitHubAppClient {
     );
     if (response.status === 404 || response.status === 422) {
       await response.body?.cancel();
-      throw repository === undefined
+      throw repositories === undefined
         ? new InstallationNotFoundError(subject)
         : new RepositoryNotFoundError(subject);
     }

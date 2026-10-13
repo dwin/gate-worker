@@ -37,6 +37,7 @@ export interface ServerOptions {
   readonly requireExplicitPolicy?: boolean;
   readonly defaultTtl?: number;
   readonly maxTtl?: number;
+  readonly maxTargetRepositories?: number;
   readonly maxPermissions?: Readonly<Record<string, string>>;
   readonly apps?: readonly { clientId: string; organization: string }[];
   readonly origin?: { headerName: string; value: string };
@@ -74,6 +75,9 @@ export async function startServer(options: ServerOptions = {}) {
       default_token_ttl: options.defaultTtl ?? 3600,
       max_token_ttl: options.maxTtl ?? 7200,
       require_explicit_policy: options.requireExplicitPolicy ?? false,
+      ...(options.maxTargetRepositories === undefined
+        ? {}
+        : { max_target_repositories: options.maxTargetRepositories }),
       github_api_base_url: github.baseUrl,
       providers: [{ name: "github-actions", issuer: oidc.issuer }],
       max_permissions: options.maxPermissions ?? {

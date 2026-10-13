@@ -23,12 +23,41 @@ function isNonEmptyString(value: unknown): value is string {
   return typeof value === "string" && value !== "";
 }
 
+function isStringRecord(value: unknown): value is Record<string, string> {
+  return (
+    typeof value === "object" &&
+    value !== null &&
+    !Array.isArray(value) &&
+    Object.values(value).every(isNonEmptyString)
+  );
+}
+
+/** A multi-repository response must name a policy for exactly the requested repositories. */
+function coversRepositories(
+  candidate: Partial<Record<keyof ExchangeResponseBody, unknown>>,
+  repositories: readonly string[],
+): boolean {
+  const { repositories: covered, matched_policies: policies } = candidate;
+  return (
+    Array.isArray(covered) &&
+    covered.length === repositories.length &&
+    repositories.every((repository) => covered.includes(repository)) &&
+    isStringRecord(policies) &&
+    Object.keys(policies).length === repositories.length &&
+    repositories.every((repository) => isNonEmptyString(policies[repository]))
+  );
+}
+
 /**
  * Checks a 2xx body before anything is published, so a proxy's `200 {}` fails the
  * step instead of handing later steps an empty token. A token that did arrive is
  * masked first, since the error path may still log parts of the response.
  */
-function parseSuccess(text: string, io: ActionIO): ExchangeResponseBody {
+function parseSuccess(
+  text: string,
+  io: ActionIO,
+  repositories: readonly string[],
+): ExchangeResponseBody {
   let body: unknown;
   try {
     body = JSON.parse(text);
@@ -56,6 +85,9 @@ function parseSuccess(text: string, io: ActionIO): ExchangeResponseBody {
     Object.values(permissions).every((level) => level === "read" || level === "write")
       ? undefined
       : "permissions",
+    repositories.length === 1 || coversRepositories(candidate, repositories)
+      ? undefined
+      : "repositories",
   ].filter((field) => field !== undefined);
   if (missing.length > 0) {
     throw new Error(`exchange succeeded but the response is malformed (${missing.join(", ")})`);
@@ -73,7 +105,9 @@ async function exchange(
 ): Promise<ExchangeResponseBody> {
   const body: ExchangeRequestBody = {
     oidc_token: oidcToken,
-    target_repository: inputs.repository,
+    ...(inputs.repositories.length === 1
+      ? { target_repository: inputs.repositories[0] ?? "" }
+      : { target_repositories: inputs.repositories }),
     ...(inputs.policyName === undefined ? {} : { policy_name: inputs.policyName }),
     ...(inputs.permissions === undefined ? {} : { requested_permissions: inputs.permissions }),
     ...(inputs.ttl === undefined ? {} : { requested_ttl: inputs.ttl }),
@@ -103,7 +137,7 @@ async function exchange(
       networkError = error;
     }
     if (response?.ok) {
-      return parseSuccess(await response.text(), io);
+      return parseSuccess(await response.text(), io, inputs.repositories);
     }
     const text = response ? await response.text() : "";
     const failure = response
@@ -150,6 +184,16 @@ export async function runExchange(
     io.setOutput("token", result.token);
     io.setOutput("expires-at", result.expires_at);
     io.setOutput("matched-policy", result.matched_policy);
+    // Only a multi-repository response's map was validated against the request,
+    // so a single repository's map is always built from matched_policy.
+    io.setOutput(
+      "matched-policies",
+      JSON.stringify(
+        inputs.repositories.length === 1
+          ? { [inputs.repositories[0] ?? ""]: result.matched_policy }
+          : (result.matched_policies ?? {}),
+      ),
+    );
     io.setOutput("permissions", JSON.stringify(result.permissions));
     io.setOutput("request-id", result.request_id);
     if (inputs.revokeOnCompletion) {
@@ -157,7 +201,7 @@ export async function runExchange(
       io.saveState(STATE_API_URL, inputs.apiUrl);
     }
     io.info(
-      `Issued a token for ${inputs.repository} via policy "${result.matched_policy}" with ${JSON.stringify(result.permissions)}, expiring ${result.expires_at} (request ${result.request_id}).`,
+      `Issued a token for ${inputs.repositories.join(", ")} via policy "${result.matched_policy}" with ${JSON.stringify(result.permissions)}, expiring ${result.expires_at} (request ${result.request_id}).`,
     );
   } catch (error) {
     io.setFailed(

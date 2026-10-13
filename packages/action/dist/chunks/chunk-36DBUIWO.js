@@ -20361,6 +20361,30 @@ function parsePermissions(raw) {
   }
   return permissions;
 }
+function parseRepositories(raw) {
+  const repositories = raw.split(/[,\r\n]+/).map((entry) => entry.trim()).filter(Boolean);
+  if (repositories.length === 0) {
+    throw new InputError(`repository: expected owner/repo, got "${raw.trim()}"`);
+  }
+  const seen = /* @__PURE__ */ new Set();
+  for (const repository of repositories) {
+    if (!REPOSITORY.test(repository)) {
+      throw new InputError(`repository: expected owner/repo, got "${repository}"`);
+    }
+    const key = repository.toLowerCase();
+    if (seen.has(key)) {
+      throw new InputError(`repository: ${repository} is listed more than once`);
+    }
+    seen.add(key);
+  }
+  const owners = new Set(repositories.map((repository) => repository.split("/")[0]));
+  if (owners.size > 1) {
+    throw new InputError(
+      "repository: every listed repository must have the same owner, spelled identically, because one token covers one App installation"
+    );
+  }
+  return repositories;
+}
 function positiveInteger(name, raw, maximum) {
   const text = raw.trim();
   if (!text) {
@@ -20396,9 +20420,10 @@ function secureUrl(name, raw) {
 }
 function readInputs(io) {
   const endpoint = secureUrl("endpoint", io.getInput("endpoint"));
-  const repository = io.getInput("repository").trim();
-  if (!REPOSITORY.test(repository)) {
-    throw new InputError(`repository: expected owner/repo, got "${repository}"`);
+  const repositories = parseRepositories(io.getInput("repository"));
+  const permissions = parsePermissions(io.getInput("permissions"));
+  if (repositories.length > 1 && permissions === void 0) {
+    throw new InputError("permissions: required when repository lists more than one repository");
   }
   const originName = io.getInput("origin-header-name").trim();
   const originValue = io.getInput("origin-header-value");
@@ -20411,9 +20436,9 @@ function readInputs(io) {
   }
   return {
     endpoint,
-    repository,
+    repositories,
     policyName: io.getInput("policy-name").trim() || void 0,
-    permissions: parsePermissions(io.getInput("permissions")),
+    permissions,
     // GitHub installation tokens never outlive one hour.
     ttl: positiveInteger("ttl", io.getInput("ttl"), 3600),
     audience: io.getInput("audience").trim() || "gate",
@@ -20441,7 +20466,14 @@ function describeFailure(status, text) {
 function isNonEmptyString(value) {
   return typeof value === "string" && value !== "";
 }
-function parseSuccess(text, io) {
+function isStringRecord(value) {
+  return typeof value === "object" && value !== null && !Array.isArray(value) && Object.values(value).every(isNonEmptyString);
+}
+function coversRepositories(candidate, repositories) {
+  const { repositories: covered, matched_policies: policies } = candidate;
+  return Array.isArray(covered) && covered.length === repositories.length && repositories.every((repository) => covered.includes(repository)) && isStringRecord(policies) && Object.keys(policies).length === repositories.length && repositories.every((repository) => isNonEmptyString(policies[repository]));
+}
+function parseSuccess(text, io, repositories) {
   let body;
   try {
     body = JSON.parse(text);
@@ -20461,7 +20493,8 @@ function parseSuccess(text, io) {
     isNonEmptyString(candidate.expires_at) && Number.isFinite(Date.parse(candidate.expires_at)) ? void 0 : "expires_at",
     isNonEmptyString(candidate.matched_policy) ? void 0 : "matched_policy",
     isNonEmptyString(candidate.request_id) ? void 0 : "request_id",
-    typeof permissions === "object" && permissions !== null && !Array.isArray(permissions) && Object.values(permissions).every((level) => level === "read" || level === "write") ? void 0 : "permissions"
+    typeof permissions === "object" && permissions !== null && !Array.isArray(permissions) && Object.values(permissions).every((level) => level === "read" || level === "write") ? void 0 : "permissions",
+    repositories.length === 1 || coversRepositories(candidate, repositories) ? void 0 : "repositories"
   ].filter((field) => field !== void 0);
   if (missing.length > 0) {
     throw new Error(`exchange succeeded but the response is malformed (${missing.join(", ")})`);
@@ -20471,7 +20504,7 @@ function parseSuccess(text, io) {
 async function exchange(inputs, oidcToken, io, fetchImpl, sleep, now) {
   const body = {
     oidc_token: oidcToken,
-    target_repository: inputs.repository,
+    ...inputs.repositories.length === 1 ? { target_repository: inputs.repositories[0] ?? "" } : { target_repositories: inputs.repositories },
     ...inputs.policyName === void 0 ? {} : { policy_name: inputs.policyName },
     ...inputs.permissions === void 0 ? {} : { requested_permissions: inputs.permissions },
     ...inputs.ttl === void 0 ? {} : { requested_ttl: inputs.ttl }
@@ -20500,7 +20533,7 @@ async function exchange(inputs, oidcToken, io, fetchImpl, sleep, now) {
       networkError = error2;
     }
     if (response?.ok) {
-      return parseSuccess(await response.text(), io);
+      return parseSuccess(await response.text(), io, inputs.repositories);
     }
     const text = response ? await response.text() : "";
     const failure = response ? describeFailure(response.status, text) : `network error: ${String(networkError)}`;
@@ -20533,6 +20566,12 @@ async function runExchange(io, fetchImpl, sleep, now = Date.now) {
     io.setOutput("token", result.token);
     io.setOutput("expires-at", result.expires_at);
     io.setOutput("matched-policy", result.matched_policy);
+    io.setOutput(
+      "matched-policies",
+      JSON.stringify(
+        inputs.repositories.length === 1 ? { [inputs.repositories[0] ?? ""]: result.matched_policy } : result.matched_policies ?? {}
+      )
+    );
     io.setOutput("permissions", JSON.stringify(result.permissions));
     io.setOutput("request-id", result.request_id);
     if (inputs.revokeOnCompletion) {
@@ -20540,7 +20579,7 @@ async function runExchange(io, fetchImpl, sleep, now = Date.now) {
       io.saveState(STATE_API_URL, inputs.apiUrl);
     }
     io.info(
-      `Issued a token for ${inputs.repository} via policy "${result.matched_policy}" with ${JSON.stringify(result.permissions)}, expiring ${result.expires_at} (request ${result.request_id}).`
+      `Issued a token for ${inputs.repositories.join(", ")} via policy "${result.matched_policy}" with ${JSON.stringify(result.permissions)}, expiring ${result.expires_at} (request ${result.request_id}).`
     );
   } catch (error2) {
     io.setFailed(

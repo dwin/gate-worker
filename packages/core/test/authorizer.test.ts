@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import {
   CentralPolicy,
+  intersectPermissions,
   lookupClaim,
   matchAutomatic,
   matchExplicit,
@@ -241,5 +242,22 @@ describe("resolveTtl", () => {
     expect(resolveTtl(1800, readonly, 900, 3600)).toBe(1800);
     expect(resolveTtl(1800, readwrite, 900, 3600)).toBe(600);
     expect(resolveTtl(0, readonly, 900, 600)).toBe(600);
+  });
+});
+
+describe("intersectPermissions", () => {
+  it("keeps only permissions every set grants, at the lowest level granted", () => {
+    expect(
+      intersectPermissions([
+        { contents: "write", issues: "write", metadata: "read" },
+        { contents: "read", issues: "write" },
+        { contents: "write", issues: "read", packages: "write" },
+      ]),
+    ).toEqual({ contents: "read", issues: "read" });
+  });
+
+  it("drops a permission any set holds at none, and returns {} for no sets", () => {
+    expect(intersectPermissions([{ contents: "read" }, { contents: "none" }])).toEqual({});
+    expect(intersectPermissions([])).toEqual({});
   });
 });

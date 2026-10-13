@@ -242,6 +242,108 @@ describe("runExchange", () => {
   });
 });
 
+describe("multiple repositories", () => {
+  const MULTI_SUCCESS = {
+    ...SUCCESS,
+    matched_policy: "ci-read, ci-docs",
+    repositories: ["example-org/a", "example-org/b"],
+    matched_policies: { "example-org/a": "ci-read", "example-org/b": "ci-docs" },
+  };
+
+  it("sends target_repositories for a newline- or comma-separated list", async () => {
+    const fake = fakeIO({
+      ...BASE_INPUTS,
+      repository: "example-org/a,\n  example-org/b\n",
+      permissions: "contents: read",
+    });
+    const http = scriptedFetch([() => Response.json(MULTI_SUCCESS)]);
+    await runExchange(fake.io, http.fetch, noSleep);
+
+    expect(fake.failed()).toBeUndefined();
+    const body = JSON.parse(http.requests[0]?.init?.body as string) as Record<string, unknown>;
+    expect(body["target_repositories"]).toEqual(["example-org/a", "example-org/b"]);
+    expect(body).not.toHaveProperty("target_repository");
+    expect(JSON.parse(fake.outputs["matched-policies"] ?? "")).toEqual(
+      MULTI_SUCCESS.matched_policies,
+    );
+  });
+
+  it("reports a single repository's policy in matched-policies too", async () => {
+    const fake = fakeIO(BASE_INPUTS);
+    const http = scriptedFetch([() => Response.json(SUCCESS)]);
+    await runExchange(fake.io, http.fetch, noSleep);
+    expect(fake.outputs["matched-policies"]).toBe('{"example-org/example-repo":"ci-read"}');
+  });
+
+  it("ignores an unvalidated matched_policies map in a single-repository response", async () => {
+    const fake = fakeIO(BASE_INPUTS);
+    const http = scriptedFetch([
+      () => Response.json({ ...SUCCESS, matched_policies: { "evil-org/x": "ci-read" } }),
+    ]);
+    await runExchange(fake.io, http.fetch, noSleep);
+    expect(fake.outputs["matched-policies"]).toBe('{"example-org/example-repo":"ci-read"}');
+  });
+
+  it.each([
+    ["no permissions", { repository: "example-org/a\nexample-org/b" }, /permissions: required/],
+    [
+      "different owners",
+      { repository: "example-org/a\nother-org/b", permissions: "contents: read" },
+      /same owner/,
+    ],
+    [
+      "owners spelled differently",
+      { repository: "example-org/a\nExample-Org/b", permissions: "contents: read" },
+      /same owner/,
+    ],
+    [
+      "a duplicate",
+      { repository: "example-org/a\nExample-Org/A", permissions: "contents: read" },
+      /more than once/,
+    ],
+    ["an empty list", { repository: " , \n" }, /expected owner\/repo/],
+  ])("rejects %s before calling the server", async (_name, inputs, message) => {
+    const fake = fakeIO({ ...BASE_INPUTS, ...inputs });
+    const http = scriptedFetch([]);
+    await runExchange(fake.io, http.fetch, noSleep);
+    expect(fake.failed()).toMatch(message);
+    expect(http.requests).toHaveLength(0);
+  });
+
+  it("fails, with the token masked, when the response does not cover every repository", async () => {
+    const fake = fakeIO({
+      ...BASE_INPUTS,
+      repository: "example-org/a\nexample-org/b",
+      permissions: "contents: read",
+    });
+    const http = scriptedFetch([
+      () => Response.json({ ...MULTI_SUCCESS, repositories: ["example-org/a"] }),
+    ]);
+    await runExchange(fake.io, http.fetch, noSleep);
+    expect(fake.failed()).toMatch(/malformed \(repositories\)/);
+    expect(fake.secrets).toContain("ghs_secret");
+    expect(fake.outputs).not.toHaveProperty("token");
+  });
+
+  it("fails when matched_policies names a repository that was not requested", async () => {
+    const fake = fakeIO({
+      ...BASE_INPUTS,
+      repository: "example-org/a\nexample-org/b",
+      permissions: "contents: read",
+    });
+    const http = scriptedFetch([
+      () =>
+        Response.json({
+          ...MULTI_SUCCESS,
+          matched_policies: { ...MULTI_SUCCESS.matched_policies, "example-org/c": "ci-read" },
+        }),
+    ]);
+    await runExchange(fake.io, http.fetch, noSleep);
+    expect(fake.failed()).toMatch(/malformed \(repositories\)/);
+    expect(fake.outputs).not.toHaveProperty("matched-policies");
+  });
+});
+
 describe("URL inputs", () => {
   it("allow plain http only for loopback hosts and normalize trailing slashes", async () => {
     const fake = fakeIO({

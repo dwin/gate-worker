@@ -10,7 +10,11 @@ inputs:
     description: Base URL of the GATE server, for example https://gate.example.com.
     required: true
   repository:
-    description: Target repository (owner/repo) the token is scoped to.
+    description: |
+      Target repository (owner/repo) the token is scoped to. To scope one token
+      to several repositories, list them separated by newlines or commas. They
+      must share one owner, each must allow the request in its trust policy, and
+      permissions must then be set explicitly.
     default: ${{ github.repository }}
   policy-name:
     description: Trust policy to use. Required when the server sets require_explicit_policy.
@@ -48,7 +52,9 @@ outputs:
   expires-at:
     description: RFC 3339 expiry, capped to the effective TTL.
   matched-policy:
-    description: Name of the trust policy that matched.
+    description: Name of the trust policy that matched. For several repositories, the distinct names joined with ", ".
+  matched-policies:
+    description: JSON object mapping each repository to the trust policy that matched in it.
   permissions:
     description: Granted permissions as a JSON object.
   request-id:

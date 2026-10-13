@@ -8,6 +8,8 @@
  * - Unknown keys are errors, so typos fail the build instead of being ignored.
  * - `server`, `aws_region`, `fips`, and `otel` are accepted and ignored.
  * - Only the log audit backend and the memory selector exist in this build.
+ * - `policy.max_target_repositories` bounds multi-repository requests, which
+ *   upstream does not support.
  */
 import { z } from "zod";
 import { PERMISSION_LEVELS } from "../authorizer/permission-levels.ts";
@@ -89,6 +91,15 @@ const policySchema = z
     default_token_ttl: z.int().positive("default token TTL must be positive").default(900),
     max_token_ttl: z.int().positive("max token TTL must be positive").default(3600),
     require_explicit_policy: z.boolean().default(false),
+    /**
+     * Most repositories one `target_repositories` request may name. Each needs
+     * its own trust-policy fetch; GitHub accepts at most 500 per token.
+     */
+    max_target_repositories: z
+      .int()
+      .min(1, "max target repositories must be at least 1")
+      .max(500, "max target repositories cannot exceed 500 (GitHub's limit)")
+      .default(10),
     github_api_base_url: secureUrl("github_api_base_url").default("https://api.github.com"),
     /** Accepted for upstream compatibility; unused, as upstream never reads it either. */
     github_raw_base_url: z.string().optional(),

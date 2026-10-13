@@ -148,3 +148,30 @@ export function resolvePermissions(
   }
   return { ok: true, permissions: granted };
 }
+
+/**
+ * The permissions every set grants, each at the lowest level any set grants
+ * it. A multi-repository token carries one permission set for all of its
+ * repositories, so it may hold only what every repository's policy allows.
+ */
+export function intersectPermissions(sets: readonly Permissions[]): Permissions {
+  const [first, ...rest] = sets;
+  const result: Record<string, PermissionLevel> = {};
+  for (const [permission, level] of Object.entries(first ?? {})) {
+    let lowest: PermissionLevel | undefined = level;
+    for (const other of rest) {
+      const candidate = other[permission];
+      if (candidate === undefined) {
+        lowest = undefined;
+        break;
+      }
+      if (!isLevelAllowed(lowest, candidate)) {
+        lowest = candidate;
+      }
+    }
+    if (lowest !== undefined && lowest !== "none") {
+      result[permission] = lowest;
+    }
+  }
+  return result;
+}

@@ -5,7 +5,8 @@ const REPOSITORY = /^[A-Za-z0-9._-]+\/[A-Za-z0-9._-]+$/;
 
 export interface ActionInputs {
   readonly endpoint: string;
-  readonly repository: string;
+  /** One repository, or several of one owner for a multi-repository token. */
+  readonly repositories: readonly string[];
   readonly policyName: string | undefined;
   readonly permissions: Readonly<Record<string, string>> | undefined;
   readonly ttl: number | undefined;
@@ -56,6 +57,36 @@ export function parsePermissions(raw: string): Record<string, string> | undefine
   return permissions;
 }
 
+/** Splits on commas and newlines; one entry is an upstream-compatible request. */
+function parseRepositories(raw: string): string[] {
+  const repositories = raw
+    .split(/[,\r\n]+/)
+    .map((entry) => entry.trim())
+    .filter(Boolean);
+  if (repositories.length === 0) {
+    throw new InputError(`repository: expected owner/repo, got "${raw.trim()}"`);
+  }
+  const seen = new Set<string>();
+  for (const repository of repositories) {
+    if (!REPOSITORY.test(repository)) {
+      throw new InputError(`repository: expected owner/repo, got "${repository}"`);
+    }
+    const key = repository.toLowerCase();
+    if (seen.has(key)) {
+      throw new InputError(`repository: ${repository} is listed more than once`);
+    }
+    seen.add(key);
+  }
+  // Spelled identically, as the server matches owners to configured Apps exactly.
+  const owners = new Set(repositories.map((repository) => repository.split("/")[0]));
+  if (owners.size > 1) {
+    throw new InputError(
+      "repository: every listed repository must have the same owner, spelled identically, because one token covers one App installation",
+    );
+  }
+  return repositories;
+}
+
 function positiveInteger(name: string, raw: string, maximum: number): number | undefined {
   const text = raw.trim();
   if (!text) {
@@ -99,9 +130,10 @@ function secureUrl(name: string, raw: string): string {
 
 export function readInputs(io: ActionIO): ActionInputs {
   const endpoint = secureUrl("endpoint", io.getInput("endpoint"));
-  const repository = io.getInput("repository").trim();
-  if (!REPOSITORY.test(repository)) {
-    throw new InputError(`repository: expected owner/repo, got "${repository}"`);
+  const repositories = parseRepositories(io.getInput("repository"));
+  const permissions = parsePermissions(io.getInput("permissions"));
+  if (repositories.length > 1 && permissions === undefined) {
+    throw new InputError("permissions: required when repository lists more than one repository");
   }
   const originName = io.getInput("origin-header-name").trim();
   const originValue = io.getInput("origin-header-value");
@@ -114,9 +146,9 @@ export function readInputs(io: ActionIO): ActionInputs {
   }
   return {
     endpoint,
-    repository,
+    repositories,
     policyName: io.getInput("policy-name").trim() || undefined,
-    permissions: parsePermissions(io.getInput("permissions")),
+    permissions,
     // GitHub installation tokens never outlive one hour.
     ttl: positiveInteger("ttl", io.getInput("ttl"), 3600),
     audience: io.getInput("audience").trim() || "gate",
