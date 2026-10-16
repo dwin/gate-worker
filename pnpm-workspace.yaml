@@ -16,7 +16,7 @@ catalog:
   "@cloudflare/workers-types": 5.20260925.1
   "@cloudflare/vitest-plugin": 1.2.6
   # Test. Vitest stays on 4.x: @cloudflare/vitest-plugin 1.2.6 pins vitest ^4.1.0.
-  vitest: 4.1.10
+  vitest: 5.0.3
   # Build
   esbuild: 0.28.2
   # TypeScript stays on 6.x: typescript-eslint 8.70.1 supports typescript <6.1.0.
